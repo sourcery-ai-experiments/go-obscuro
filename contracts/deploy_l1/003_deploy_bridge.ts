@@ -8,6 +8,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     } = hre;
 
     const {deployer} = await getNamedAccounts();
+    console.log(`003 - deployer ${deployer}`);
 
     const messengerDeployment = await deployments.get("CrossChainMessenger");
 

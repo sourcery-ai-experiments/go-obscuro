@@ -9,6 +9,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     const l1Accounts = await l1Network.getNamedAccounts();
     const l2Accounts = await l2Network.getNamedAccounts();
 
+    console.log(`L2_003 - multi deployer`);
+
     const layer2BridgeDeployment = await l2Network.deployments.get("ObscuroL2Bridge");
     const HOCDeployment = await l1Network.deployments.get("HOCERC20");
     const POCDeployment = await l1Network.deployments.get("POCERC20");
@@ -24,24 +26,27 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
     console.log(`setRemoteBridge = ${layer2BridgeDeployment.address}`);
 
-    let hocResult = await l1Network.deployments.execute("ObscuroBridge", {
+    let hocResultPromise = l1Network.deployments.execute("ObscuroBridge", {
         from: l1Accounts.deployer, 
         log: true,
     }, "whitelistToken", HOCDeployment.address, "HOC", "HOC");
 
+    const hocResult = (await hocResultPromise); 
     if (hocResult.status != 1) {
-        console.error("Ops");
-        throw Error("ops");
+        console.error("Failed to whitelist HOC");
+        throw Error("Failed to whitelist HOC");
     }
 
-    const pocResult = await l1Network.deployments.execute("ObscuroBridge", {
+
+    const pocResultPromise = l1Network.deployments.execute("ObscuroBridge", {
         from: l1Accounts.deployer, 
         log: true,
     }, "whitelistToken", POCDeployment.address, "POC", "POC");
     
+    const pocResult = (await pocResultPromise);
     if (pocResult.status != 1) {
-        console.error("Ops");
-        throw Error("ops");
+        console.error("Failed to whitelist POC");
+        throw Error("Failed to whitelist POC");
     }
 
     const eventSignature = "LogMessagePublished(address,uint64,uint32,uint32,bytes,uint8)";
@@ -79,8 +84,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
     // Freeze until the enclave processes the blocks and picks up the messages that have been carried over.
     await new Promise(resolve=>setTimeout(resolve, 2_000));
-
-    console.log(`Relaying messages using account ${l2Accounts.deployer}`);
     const relayMsg = async (msg: any) => {
         return l2Network.deployments.execute("CrossChainMessenger", {
             from: l2Accounts.deployer, 
@@ -88,13 +91,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         }, "relayMessage", msg);
     };
 
-    console.log(`Relaying message - ${JSON.stringify(messages[0])}`);
-    let results = [await relayMsg(messages[0])];
+    const hocRelayRes = await relayMsg(messages[0]);
+    const pocRelayRes = await relayMsg(messages[1]);
 
-    console.log(`Relaying message - ${JSON.stringify(messages[1])}`);
-    results = results.concat(await relayMsg(messages[1]))
-
-    results.forEach(res=>{
+    [ hocRelayRes, pocRelayRes ].forEach(res=>{
         if (res.status != 1) {
             throw Error("Unable to relay messages...");
         } 

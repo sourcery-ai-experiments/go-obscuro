@@ -1,6 +1,6 @@
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
 import {DeployFunction} from 'hardhat-deploy/types';
-import { ManagementContract } from '../typechain-types/contracts/management';
+import { ManagementContract } from '../typechain-types/src/management';
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     const { 
@@ -9,8 +9,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     } = hre;
 
     const {deployer} = await getNamedAccounts();
-
-    const mgmtDeployment = await deployments.get("ManagementContract");
+    console.log(`002 - deployer ${deployer}`);
 
     const messageBusAddress : string = await deployments.read("ManagementContract", {}, "messageBus");
 

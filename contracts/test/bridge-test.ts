@@ -1,25 +1,21 @@
 import { expect } from "chai";
 import hre, { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
-import { bridge } from "../typechain-types/contracts";
 import { MessageBus, ObscuroBridge } from "../typechain-types";
-import { ObscuroL2Bridge } from "../typechain-types/contracts/bridge/L2/L2_Bridge.sol";
-import { CrossChainMessenger } from "../typechain-types/contracts/messaging/messenger";
-import { Contract } from "hardhat/internal/hardhat-network/stack-traces/model";
+import { ObscuroL2Bridge } from "../typechain-types/src/bridge/L2/L2_Bridge.sol";
+import { CrossChainMessenger } from "../typechain-types/src/messaging/messenger";
 
 
 import type {
   ContractTransaction
 } from 'ethers';
-import { ObscuroERC20 } from "../typechain-types/contracts/bridge/L2";
-import { ObscuroERC20__factory } from "../typechain-types/factories/contracts/bridge/L2";
-import { CrossChainMessenger__factory } from "../typechain-types/factories/contracts/messaging/messenger";
-import { ObscuroBridge__factory } from "../typechain-types/factories/contracts/bridge/L1/L1_Bridge.sol";
-import { ObscuroL2Bridge__factory } from "../typechain-types/factories/contracts/bridge/L2/L2_Bridge.sol";
-import { MessageBus__factory } from "../typechain-types/factories/contracts/messaging";
+import { ObscuroERC20 } from "../typechain-types/src/bridge/L2";
+import { ObscuroERC20__factory } from "../typechain-types/factories/src/bridge/L2";
+import { CrossChainMessenger__factory } from "../typechain-types/factories/src/messaging/messenger";
+import { ObscuroBridge__factory } from "../typechain-types/factories/src/bridge/L1/L1_Bridge.sol";
+import { ObscuroL2Bridge__factory } from "../typechain-types/factories/src/bridge/L2/L2_Bridge.sol";
+import { MessageBus__factory } from "../typechain-types/factories/src/messaging";
 
 describe("Bridge", function () {
-
   let busL1: MessageBus
   let busL2: MessageBus
 

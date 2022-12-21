@@ -8,6 +8,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     } = hre;
 
     const {deployer} = await getNamedAccounts();
+
+    console.log(`001 - deployer ${deployer}`);
+
     const contractArtifact = await hre.artifacts.readArtifact("ManagementContract");
 
     await deployments.deploy('ManagementContract', {

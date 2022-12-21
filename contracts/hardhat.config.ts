@@ -8,6 +8,7 @@ import 'hardhat-deploy';
 import * as abigen from './scripts/abigen';
 
 import './scripts/obscuro-deploy';
+import './scripts/obscuro-test';
 import './scripts/run-wallet-extension';
 
 const config: HardhatUserConfig = {
@@ -37,26 +38,31 @@ const config: HardhatUserConfig = {
   },
   networks: {
     simGeth: {
-      url: "http://127.0.0.1:32000",
+      url: "http://127.0.0.1:8025",
+      chainId: 1337,
       live: false,
-      saveDeployments: true,
+      saveDeployments: true,   
       tags: ["local"],
       deploy: [ 'deploy_l1/' ],
-      accounts: [ 'f52e5418e349dccdda29b6ac8b0abe6576bb7713886aa85abea6181ba731f9bb']
+      accounts: [ 'f52e5418e349dccdda29b6ac8b0abe6576bb7713886aa85abea6181ba731f9bb'],
     },
     simObscuro: {
       url: "http://127.0.0.1:3000",
+      obscuroEncRpcUrl: "ws://host.docker.internal:13001",
       live: false,
-      saveDeployments: true,
+      saveDeployments: true,   
       tags: ["local"],
       deploy: [ 'deploy_l2/' ],
-      accounts: [ '8dfb8083da6275ae3e4f41e3e8a8c19d028d32c9247e24530933782f2a05035b']
+      accounts: [ '8dfb8083da6275ae3e4f41e3e8a8c19d028d32c9247e24530933782f2a05035b'],
+      companionNetworks: {
+        layer1: 'simGeth'
+      },
     },
     localGeth: {
       url: "http://127.0.0.1:8025",
       chainId: 1337,
       live: false,
-      saveDeployments: true,
+      saveDeployments: false,
       tags: ["local"],
       deploy: [ 'deploy_l1/' ],
       accounts: [ 'f52e5418e349dccdda29b6ac8b0abe6576bb7713886aa85abea6181ba731f9bb']

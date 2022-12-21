@@ -8,6 +8,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     } = hre;
 
     const {deployer} = await getNamedAccounts();
+    console.log(`004 - deployer ${deployer}`);
 
     const deploymentResult = await deployments.deploy('HOCERC20', {
         from: deployer,

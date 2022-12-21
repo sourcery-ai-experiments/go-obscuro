@@ -1,6 +1,6 @@
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
 import {DeployFunction} from 'hardhat-deploy/types';
-import { ObscuroBridge } from '../typechain-types/contracts/bridge/L1/L1_Bridge.sol';
+import { ObscuroBridge } from '../typechain-types/src/bridge/L1/L1_Bridge.sol';
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     const { 
@@ -9,6 +9,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     } = hre;
 
     const {deployer} = await getNamedAccounts();
+    console.log(`005 - deployer ${deployer}`);
 
     await deployments.deploy('POCERC20', {
         from: deployer,

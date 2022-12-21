@@ -8,6 +8,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     } = hre;
 
     const {deployer} = await getNamedAccounts();
+    console.log(`L2_002 - deployer ${deployer}`);
 
     const layer1BridgeDeployment = await hre.companionNetworks.layer1.deployments.get("ObscuroBridge");
     const messengerDeployment = await deployments.get("CrossChainMessenger");

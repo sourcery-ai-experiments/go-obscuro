@@ -5,11 +5,12 @@ import "hardhat-abi-exporter";
 import "@solidstate/hardhat-bytecode-exporter";
 
 import 'hardhat-deploy';
-import * as abigen from './scripts/abigen';
+import * as abigen from './tasks/abigen';
 
-import './scripts/obscuro-deploy';
-import './scripts/obscuro-test';
-import './scripts/run-wallet-extension';
+import './tasks/obscuro-deploy';
+import './tasks/obscuro-test';
+import './tasks/run-wallet-extension';
+import './tasks/obscuro-binary-environment';
 
 const config: HardhatUserConfig = {
   paths: {

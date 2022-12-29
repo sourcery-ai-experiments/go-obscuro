@@ -24,6 +24,7 @@ task("run-geth-nodes")
     ], {
         detached: true,
     });
+    gethnetwork.unref();
 
     await new Promise(resolve=>{
         gethnetwork.stdout.on('data', (data: string) => {
@@ -55,11 +56,12 @@ task('run-enclave')
         "--sequencerID=0x0654D8B60033144D567f25bF41baC1FB0D60F23B",
         "--messageBusAddress=0xFD03804faCA2538F4633B3EBdfEfc38adafa259B"
     ], { detached: true });
+    enclaveProc.unref();
 
     await new Promise((resolve)=>{
         const timer = setTimeout(resolve, 60_000);
         enclaveProc.stdout.on('data', (data: string) => {
-           // console.log(data.toString());
+            console.log(data.toString());
             if (data.includes("Obscuro enclave service started.")) {
                 clearTimeout(timer);
                 resolve(true);
@@ -90,11 +92,12 @@ task('run-host')
     ], {
         detached: true,
     });
+    hostProc.unref();
 
     await new Promise((resolve)=>{
         const timer = setTimeout(resolve, 60_000);
         hostProc.stdout.on('data', (data: string) => {
-           // console.log(data.toString())
+            console.log(data.toString())
             if (data.includes("Started P2P networking")) {
                 clearTimeout(timer);
                 resolve(true);

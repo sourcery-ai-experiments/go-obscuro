@@ -44,7 +44,6 @@ type BatchHeader struct {
 	L1Proof L1RootHash     // the L1 block used by the enclave to generate the current batch
 	R, S    *big.Int       // signature values
 	// TODO: mark as deprecated Withdrawals are now contained within cross chain messages.
-	Withdrawals        []Withdrawal
 	CrossChainMessages []MessageBus.StructsCrossChainMessage `json:"crossChainMessages"`
 
 	// The block hash of the latest block that has been scanned for cross chain messages.

@@ -29,6 +29,7 @@ import (
 
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	gethlog "github.com/ethereum/go-ethereum/log"
+	gethmetrics "github.com/ethereum/go-ethereum/metrics"
 	hostcommon "github.com/obscuronet/go-obscuro/go/common/host"
 )
 
@@ -78,6 +79,8 @@ type host struct {
 	batchManager    *batchmanager.BatchManager
 
 	logger gethlog.Logger
+
+	metricRegistry gethmetrics.Registry
 }
 
 func NewHost(
@@ -85,11 +88,13 @@ func NewHost(
 	p2p hostcommon.P2P,
 	ethClient ethadapter.EthClient,
 	enclaveClient common.Enclave,
+	rpcServer clientrpc.Server,
 	ethWallet wallet.Wallet,
 	mgmtContractLib mgmtcontractlib.MgmtContractLib,
 	logger gethlog.Logger,
+	regMetrics gethmetrics.Registry,
 ) hostcommon.Host {
-	database := db.NewInMemoryDB() // todo - make this config driven
+	database := db.NewInMemoryDB(regMetrics) // todo - make this config driven
 	host := &host{
 		// config
 		config:  config,
@@ -114,16 +119,19 @@ func NewHost(
 		// Initialize the host DB
 		db: database,
 
+		rpcServer: rpcServer, // use injected RPC server
+
 		mgmtContractLib: mgmtContractLib, // library that provides a handler for Management Contract
 		ethWallet:       ethWallet,       // the host's ethereum wallet
 		logEventManager: events.NewLogEventManager(logger),
 		batchManager:    batchmanager.NewBatchManager(database, config.P2PPublicAddress),
 
-		logger: logger,
+		logger:         logger,
+		metricRegistry: regMetrics,
 	}
 
 	if config.HasClientRPCHTTP || config.HasClientRPCWebsockets {
-		rpcAPIs := []rpc.API{
+		host.rpcServer.RegisterAPIs([]rpc.API{
 			{
 				Namespace: APINamespaceObscuro,
 				Version:   APIVersion1,
@@ -160,8 +168,7 @@ func NewHost(
 				Service:   clientapi.NewFilterAPI(host, logger),
 				Public:    true,
 			},
-		}
-		host.rpcServer = clientrpc.NewServer(config, rpcAPIs, logger)
+		})
 	}
 
 	var prof *profiler.Profiler
@@ -245,10 +252,8 @@ func (h *host) broadcastSecret() error {
 		HostAddress:   h.config.P2PPublicAddress,
 	}
 	initialiseSecretTx := h.mgmtContractLib.CreateInitializeSecret(l1tx, h.ethWallet.GetNonceAndIncrement())
-	err = h.signAndBroadcastL1Tx(common.DescribedTransactionData{
-		Data:        initialiseSecretTx,
-		Description: "Initialize secret transaction.",
-	}, l1TxTriesSecret)
+	// we block here until we confirm a successful receipt. It is important this is published before the initial rollup.
+	err = h.signAndBroadcastL1Tx(initialiseSecretTx, l1TxTriesSecret, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialise enclave secret. Cause: %w", err)
 	}
@@ -561,10 +566,9 @@ func (h *host) publishRollup(producedRollup *common.ExtRollup) {
 		}})
 
 	rollupTx := h.mgmtContractLib.CreateRollup(tx, h.ethWallet.GetNonceAndIncrement())
-	err = h.signAndBroadcastL1Tx(common.DescribedTransactionData{
-		Data:        rollupTx,
-		Description: "Publish rollup transaction.",
-	}, l1TxTriesRollup)
+
+	// fire-and-forget (track the receipt asynchronously)
+	err = h.signAndBroadcastL1Tx(rollupTx, l1TxTriesRollup, false)
 	if err != nil {
 		h.logger.Error("could not broadcast rollup", log.ErrKey, err)
 	}
@@ -588,9 +592,11 @@ func (h *host) storeAndDistributeBatch(producedBatch *common.ExtBatch) {
 }
 
 // `tries` is the number of times to attempt broadcasting the transaction.
-func (h *host) signAndBroadcastL1Tx(describedTx common.DescribedTransactionData, tries uint64) error {
+// if awaitReceipt is true then this method will block and synchronously wait to check the receipt, otherwise it is fire
+// and forget and the receipt tracking will happen in a separate go-routine
+func (h *host) signAndBroadcastL1Tx(tx types.TxData, tries uint64, awaitReceipt bool) error {
 	var err error
-	tx, err := h.ethClient.EstimateGasAndGasPrice(describedTx.Data, h.ethWallet.Address())
+	tx, err = h.ethClient.EstimateGasAndGasPrice(tx, h.ethWallet.Address())
 	if err != nil {
 		return fmt.Errorf("unable to estimate gas limit and gas price - %w", err)
 	}
@@ -608,14 +614,24 @@ func (h *host) signAndBroadcastL1Tx(describedTx common.DescribedTransactionData,
 	}
 	h.logger.Trace("L1 transaction sent successfully, watching for receipt.")
 
-	// asynchronously watch for a successful receipt
-	// todo: consider how to handle the various ways that L1 transactions could fail to improve node operator QoL
-	go h.watchForReceipt(signedTx.Hash(), describedTx.Description)
+	if awaitReceipt {
+		// block until receipt is found and then return
+		return h.waitForReceipt(signedTx.Hash())
+	}
+
+	// else just watch for receipt asynchronously and log if it fails
+	go func() {
+		// todo: consider how to handle the various ways that L1 transactions could fail to improve node operator QoL
+		err := h.waitForReceipt(signedTx.Hash())
+		if err != nil {
+			h.logger.Error("L1 transaction failed", log.ErrKey, err)
+		}
+	}()
 
 	return nil
 }
 
-func (h *host) watchForReceipt(txHash common.TxHash, txDescription string) {
+func (h *host) waitForReceipt(txHash common.TxHash) error {
 	var receipt *types.Receipt
 	var err error
 	err = retry.Do(
@@ -626,19 +642,14 @@ func (h *host) watchForReceipt(txHash common.TxHash, txDescription string) {
 		retry.NewTimeoutStrategy(maxWaitForL1Receipt, retryIntervalForL1Receipt),
 	)
 	if err != nil {
-		h.logger.Error("receipt for L1 transaction never found despite 'successful' broadcast",
-			"err", err, "signer", h.ethWallet.Address().Hex(), "tx_description", txDescription,
-		)
-		return
+		return fmt.Errorf("receipt for L1 transaction never found despite 'successful' broadcast - %w", err)
 	}
 
 	if err == nil && receipt.Status != types.ReceiptStatusSuccessful {
-		h.logger.Error("unsuccessful receipt found for published L1 transaction",
-			"status", receipt.Status,
-			"signer", h.ethWallet.Address().Hex(),
-			"tx_description", txDescription)
+		return fmt.Errorf("unsuccessful receipt found for published L1 transaction, status=%d", receipt.Status)
 	}
 	h.logger.Trace("Successful L1 transaction receipt found.", "blk", receipt.BlockNumber, "blkHash", receipt.BlockHash)
+	return nil
 }
 
 // This method implements the procedure by which a node obtains the secret
@@ -664,11 +675,8 @@ func (h *host) requestSecret() error {
 		panic(fmt.Errorf("could not fetch head L1 block. Cause: %w", err))
 	}
 	requestSecretTx := h.mgmtContractLib.CreateRequestSecret(l1tx, h.ethWallet.GetNonceAndIncrement())
-	err = h.signAndBroadcastL1Tx(common.DescribedTransactionData{
-		Data:        requestSecretTx,
-		Description: "Request secret transsaction.",
-	}, l1TxTriesSecret)
-
+	// we wait until the secret req transaction has succeeded before we start polling for the secret
+	err = h.signAndBroadcastL1Tx(requestSecretTx, l1TxTriesSecret, true)
 	if err != nil {
 		return err
 	}
@@ -714,10 +722,8 @@ func (h *host) publishSharedSecretResponses(scrtResponses []*common.ProducedSecr
 		// TODO review: l1tx.Sign(a.attestationPubKey) doesn't matter as the waitSecret will process a tx that was reverted
 		respondSecretTx := h.mgmtContractLib.CreateRespondSecret(l1tx, h.ethWallet.GetNonceAndIncrement(), false)
 		h.logger.Trace("Broadcasting secret response L1 tx.", "requester", scrtResponse.RequesterID)
-		err := h.signAndBroadcastL1Tx(common.DescribedTransactionData{
-			Data:        respondSecretTx,
-			Description: "Respond Secret Transaction.",
-		}, l1TxTriesSecret)
+		// fire-and-forget (track the receipt asynchronously)
+		err := h.signAndBroadcastL1Tx(respondSecretTx, l1TxTriesSecret, false)
 		if err != nil {
 			return fmt.Errorf("could not broadcast secret response. Cause %w", err)
 		}

@@ -43,26 +43,24 @@ task("run-wallet-extension", "Starts up the wallet extension docker container.")
     })
 
     console.log(`\nWallet Extension{ ${container.id.slice(0, 5)} } %>\n`);
-    const startupPromise = new Promise((resolveInner)=> {    
+    const startupPromise = new Promise((resolveInner, fail)=> {    
         stream.on('data', (msg: any)=> {
             const message = msg.toString();
-
-            console.log(message);    
             if(message.includes("Wallet extension started")) {
                 console.log(`Wallet - success!`);
                 resolveInner(true);
             }
         });
 
-        setTimeout(resolveInner, 40_000);
+        setTimeout(fail, 40_000);
     });
 
-    await startupPromise;
-    console.log("\n[ . . . ]\n");
-
-
-    if (args.wait) {   
+    if (args.wait) {
+        await startupPromise;
+        console.log("\n[ . . . ]\n"); 
         await container.wait();
+    } else {
+        return startupPromise;
     }
 });
 

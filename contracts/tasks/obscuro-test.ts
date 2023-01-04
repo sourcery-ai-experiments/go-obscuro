@@ -45,7 +45,7 @@ task("sim-test", "Runs the tests. Takes into account if the network has obscuroE
 .setAction(async function(args, hre, runSuper) {
     const rpcURL = (hre.network.config as HardhatNetworkUserConfig).obscuroEncRpcUrl;
     if (!rpcURL) {
-        await runSuper();
+        console.log(`Network is not configured as an obscuro network. Please include "obscuroEncRpcUrl" inside the network config.`);
         return;
     } 
     try {
@@ -72,7 +72,10 @@ task("sim-test", "Runs the tests. Takes into account if the network has obscuroE
 
         if (args.runObscuroNode) {
             const enclavePromise = hre.run('run-enclave');
-            const hostPromise = hre.run('run-host').then(()=>hre.run("run-wallet-extension", {rpcUrl : rpcURL}));
+            const hostPromise = hre.run('run-host')
+            .then(()=>hre.run("run-wallet-extension", {
+                rpcUrl : rpcURL
+            }));
             promises = promises.concat([enclavePromise, hostPromise])
         }
 
@@ -88,8 +91,12 @@ task("sim-test", "Runs the tests. Takes into account if the network has obscuroE
         await Promise.all(promises);
 
         const { deployer } = await hre.getNamedAccounts();
-        await hre.run('add-key', { address: deployer })
-                .then(()=>hre.run('deploy', { noWallet: true, reset: true }));
+        await hre.run('add-key', { 
+            address: deployer 
+        }).then(()=>hre.run('deploy', { 
+            noWallet: true, 
+            reset: true 
+        }));
 
         await hre.run("test");
     } 

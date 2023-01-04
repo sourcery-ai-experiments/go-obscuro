@@ -1,16 +1,18 @@
 import { task } from "hardhat/config";
 import 'hardhat/types/config';
 
-import process, {exit} from 'process';
+import process from 'process';
 
 import { spawn } from 'node:child_process';
 import * as path from "path";
+import { boolean } from "hardhat/internal/core/params/argumentTypes";
 
 task("run-geth-nodes")
 .addOptionalParam("httpPort", "Start of HTTP ports range.", "8000")
 .addOptionalParam("wsPort", "Start of WS ports range.", "9000")
-.addOptionalParam("prefundAccounts", "Comma separated accounts to prefund", "0x323AefbFC16159655514846a9e5433C457de9389,0x0654D8B60033144D567f25bF41baC1FB0D60F23B,0x13E23Ca74DE0206C56ebaE8D51b5622EFF1E9944")
+.addOptionalParam("prefundAccounts", "Comma separated accounts to prefund", "0x323AefbFC16159655514846a9e5433C457de9389,0x0654D8B60033144D567f25bF41baC1FB0D60F23B,0x13E23Ca74DE0206C56ebaE8D51b5622EFF1E9944,0xcB78dAFE92A922714bEE27645Bec598390353999,0x1FD1a0c692937CaE3e220219361c0DF3E7BCA8FF")
 .addOptionalParam("numNodes", "How many nodes to start", "3")
+.addOptionalParam("detached", "Should the process be detached from the parent process", false, boolean)
 .setAction(async function(args, hre) {
     const integrationDir = path.resolve(hre.config.paths.root, "../integration");
     const gethNetworkMain = path.resolve(integrationDir, "gethnetwork/main");
@@ -22,9 +24,12 @@ task("run-geth-nodes")
         `--websocketStartPort=${args.wsPort}`,
         `--numNodes=${args.numNodes}`
     ], {
-        detached: true,
+        detached: args.detached,
     });
-    gethnetwork.unref();
+
+    if (args.detached) { 
+        gethnetwork.unref();
+    }
 
     await new Promise(resolve=>{
         gethnetwork.stdout.on('data', (data: string) => {
@@ -38,6 +43,7 @@ task("run-geth-nodes")
 });
 
 task('run-enclave')
+.addOptionalParam("detached", "Should the process be detached from the parent process", false, boolean)
 .setAction(async function(args, hre) {
     const enclaveDir = path.resolve(hre.config.paths.root, "../go/enclave/main");
     const enclaveProc = spawn('go', [
@@ -55,23 +61,42 @@ task('run-enclave')
         "--logLevel=4",
         "--sequencerID=0x0654D8B60033144D567f25bF41baC1FB0D60F23B",
         "--messageBusAddress=0xFD03804faCA2538F4633B3EBdfEfc38adafa259B"
-    ], { detached: true });
-    enclaveProc.unref();
+    ], { detached: args.detached });
+   
+    if (args.detached) {
+        enclaveProc.unref();
+    } else {
+        process.on('exit', ()=> { 
+            console.log(`Stopping`)
+            enclaveProc.kill() 
+        });    
+        process.on('uncaughtException', ()=> { 
+            console.log(`Stopping`)
+            enclaveProc.kill() 
+        });    
+    }
 
-    await new Promise((resolve)=>{
-        const timer = setTimeout(resolve, 60_000);
+    console.log(`args.detached = ${args.detached}`);
+
+    return new Promise((resolve, fail)=>{
+        const timer = setTimeout(fail, 60_000);
         enclaveProc.stdout.on('data', (data: string) => {
-            console.log(data.toString());
             if (data.includes("Obscuro enclave service started.")) {
                 clearTimeout(timer);
                 resolve(true);
+            } else if (data.includes("failed to start container")) {
+                clearTimeout(timer);
+                fail(data.toString());
             }
         });
-    })  
-    return enclaveProc; 
+        enclaveProc.stderr.on('data', (data: string)=> {
+            console.log(`Enclave error: ${data.toString()}`);
+        })
+    })
 });
 
 task('run-host')
+.addOptionalParam("detached", "Should the process be detached from the parent process", false, boolean)
 .setAction(async function(args, hre) {
     const hostDir = path.resolve(hre.config.paths.root, "../go/host/main");
     const hostProc = spawn('go', [
@@ -90,19 +115,23 @@ task('run-host')
         "--profilerEnabled=false",
         "--p2pPublicAddress=127.0.0.1:10000"
     ], {
-        detached: true,
+        detached: args.detached,
     });
-    hostProc.unref();
 
-    await new Promise((resolve)=>{
-        const timer = setTimeout(resolve, 60_000);
+    if (args.detached) {
+        hostProc.unref();
+    }
+
+    return new Promise((resolve, fail)=>{
+        const timer = setTimeout(fail, 60_000);
         hostProc.stdout.on('data', (data: string) => {
-            console.log(data.toString())
             if (data.includes("Started P2P networking")) {
                 clearTimeout(timer);
                 resolve(true);
             }
         });
+        hostProc.stderr.on('data', (data: string)=> {
+            console.log(`Host error: ${data.toString()}`);
+        })
     }) 
-    return hostProc;
 });

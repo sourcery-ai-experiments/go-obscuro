@@ -164,17 +164,6 @@ func NewEnclave(
 	rpcEncryptionManager := rpc.NewEncryptionManager(ecies.ImportECDSA(obscuroKey))
 
 	transactionBlobCrypto := crypto.NewTransactionBlobCryptoImpl(logger)
-
-	obscuroBridge := bridge.New(
-		config.ERC20ContractAddresses[0],
-		config.ERC20ContractAddresses[1],
-		mgmtContractLib,
-		erc20ContractLib,
-		transactionBlobCrypto,
-		config.ObscuroChainID,
-		config.L1ChainID,
-		logger,
-	)
 	memp := mempool.New(config.ObscuroChainID)
 
 	crossChainProcessors := crosschain.New(&config.MessageBusAddress, storage, big.NewInt(config.ObscuroChainID), logger)
@@ -185,7 +174,6 @@ func NewEnclave(
 		config.NodeType,
 		storage,
 		l1Blockchain,
-		obscuroBridge,
 		crossChainProcessors,
 		memp,
 		enclaveKey,
@@ -235,16 +223,6 @@ func (e *enclaveImpl) Status() (common.Status, error) {
 // StopClient is only implemented by the RPC wrapper
 func (e *enclaveImpl) StopClient() error {
 	return nil // The enclave is local so there is no client to stop
-}
-
-func (e *enclaveImpl) Start(block types.Block) error {
-	// todo - reinstate after TN1
-	/*	if e.config.SpeculativeExecution {
-			//start the speculative rollup execution loop on its own go routine
-			go e.start(block)
-		}
-	*/
-	return nil
 }
 
 // SubmitL1Block is used to update the enclave with an additional L1 block.
@@ -1132,69 +1110,5 @@ type processingEnvironment struct {
 	processedTxs    []*nodecommon.L2Tx               // txs that were already processed
 	processedTxsMap map[common.Hash]*nodecommon.L2Tx // structure used to prevent duplicates
 	state           *state.StateDB                   // the state as calculated from the previous rollup and the processed transactions
-}
-*/
-/*
-func (e *enclaveImpl) start(block types.Block) {
-	env := processingEnvironment{processedTxsMap: make(map[common.Hash]*nodecommon.L2Tx)}
-	// determine whether the block where the speculative execution will start already contains Obscuro state
-	blockState, f := e.storage.FetchBlockState(block.Hash())
-	if f {
-		env.headRollup, _ = e.storage.FetchRollup(blockState.HeadRollup)
-		if env.headRollup != nil {
-			env.state = e.storage.CreateStateDB(env.headRollup.Hash())
-		}
-	}
-
-	for {
-		select {
-		// A new winner was found after gossiping. Start speculatively executing incoming transactions to already have a rollup ready when the next round starts.
-		case winnerRollup := <-e.roundWinnerCh:
-			hash := winnerRollup.Hash()
-			env.header = obscurocore.NewHeader(&hash, winnerRollup.Header.Number.Uint64()+1, e.config.HostID)
-			env.headRollup = winnerRollup
-			env.state = e.storage.CreateStateDB(winnerRollup.Hash())
-			common.TraceWithID(e.nodeShortID, "Create new speculative env  r_%d(%d).",
-				obscurocommon.ShortHash(winnerRollup.Header.Hash()),
-				winnerRollup.Header.Number,
-			))
-
-			// determine the transactions that were not yet included
-			env.processedTxs = currentTxs(winnerRollup, e.mempool.FetchMempoolTxs(), e.storage)
-			env.processedTxsMap = obscurocore.MakeMap(env.processedTxs)
-
-			// calculate the State after executing them
-			evm.ExecuteTransactions(env.processedTxs, env.state, env.headRollup.Header, e.storage, e.config.ObscuroChainID, 0)
-
-		case tx := <-e.txCh:
-			// only process transactions if there is already a rollup to use as parent
-			if env.headRollup != nil {
-				_, found := env.processedTxsMap[tx.Hash()]
-				if !found {
-					env.processedTxsMap[tx.Hash()] = tx
-					env.processedTxs = append(env.processedTxs, tx)
-					evm.ExecuteTransactions([]*nodecommon.L2Tx{tx}, env.state, env.header, e.storage, e.config.ObscuroChainID, 0)
-				}
-			}
-
-		case <-e.speculativeWorkInCh:
-			if env.header == nil {
-				e.speculativeWorkOutCh <- speculativeWork{found: false}
-			} else {
-				b := make([]*nodecommon.L2Tx, 0, len(env.processedTxs))
-				b = append(b, env.processedTxs...)
-				e.speculativeWorkOutCh <- speculativeWork{
-					found: true,
-					r:     env.headRollup,
-					s:     env.state,
-					h:     env.header,
-					txs:   b,
-				}
-			}
-
-		case <-e.exitCh:
-			return
-		}
-	}
 }
 */

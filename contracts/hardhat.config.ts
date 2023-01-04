@@ -45,7 +45,10 @@ const config: HardhatUserConfig = {
       saveDeployments: true,   
       tags: ["local"],
       deploy: [ 'deploy_l1/' ],
-      accounts: [ 'f52e5418e349dccdda29b6ac8b0abe6576bb7713886aa85abea6181ba731f9bb'],
+      accounts: [ 
+        'f52e5418e349dccdda29b6ac8b0abe6576bb7713886aa85abea6181ba731f9bb', 
+        'f52e5418e349dccdda29b6ac8b0abe6576bb7713886aa85abea6181ba731f9aa', 
+        'f52e5418e349dccdda29b6ac8b0abe6576bb7713886aa85abea6181ba731f9ab'],
     },
     simObscuro: {
       url: "http://127.0.0.1:3000",
@@ -54,7 +57,11 @@ const config: HardhatUserConfig = {
       saveDeployments: true,   
       tags: ["local"],
       deploy: [ 'deploy_l2/' ],
-      accounts: [ '8dfb8083da6275ae3e4f41e3e8a8c19d028d32c9247e24530933782f2a05035b'],
+      accounts: [ 
+        '8dfb8083da6275ae3e4f41e3e8a8c19d028d32c9247e24530933782f2a05035b', 
+        '8dfb8083da6275ae3e4f41e3e8a8c19d028d32c9247e24530933782f2a0503aa',
+        '8dfb8083da6275ae3e4f41e3e8a8c19d028d32c9247e24530933782f2a0503ab'
+      ],
       companionNetworks: {
         layer1: 'simGeth'
       },
@@ -99,8 +106,11 @@ const config: HardhatUserConfig = {
     deployer: { // Addressed used for deploying.
         default: 0,
     },
-    sequncer:{ // For management contract.
-        default: 1,
+    alice: {
+      default: 1,
+    },
+    bob: {
+      default: 2,
     },
   }
 };

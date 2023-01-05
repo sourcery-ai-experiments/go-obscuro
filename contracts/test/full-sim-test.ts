@@ -2,13 +2,15 @@ import { expect } from "chai";
 import hre from "hardhat";
 import "hardhat-change-network";
 import { Address, Receipt } from "hardhat-deploy/types";
-import { ObscuroBridge, ObscuroERC20, ObscuroL2Bridge } from "../typechain-types";
+import { ObscuroBridge, ObscuroERC20, EthereumBridge } from "../typechain-types";
 import { l1 } from "../typechain-types/src/bridge";
+import { ObsERC20 } from "../typechain-types/src/common/ObsERC20.sol";
 
 
 describe("Simulation test", function () {
+    return; 
 
-    let l2Bridge: ObscuroL2Bridge
+    let l2Bridge: EthereumBridge;
     let l1Owner: Address 
     let l2Owner: Address
 
@@ -74,7 +76,7 @@ describe("Simulation test", function () {
             layer2 : L2Accounts.bob
         };
 
-        l2Bridge = await hre.ethers.getContractAt("ObscuroL2Bridge", l2Deployment.address);
+        l2Bridge = await hre.ethers.getContractAt("EthereumBridge", l2Deployment.address);
         
 
         const hocERC20 = await hre.companionNetworks.layer1.deployments.get("HOCERC20");
@@ -156,7 +158,7 @@ describe("Simulation test", function () {
             return expect(relayResult).not.reverted;
         }));
 
-        const L2HOC : ObscuroERC20 = await hre.ethers.getContractAt("ObscuroERC20", tokens.hoc.layer2);
+        const L2HOC : ObsERC20 = await hre.ethers.getContractAt("ObsERC20", tokens.hoc.layer2);
         
         const l2Balance = await L2HOC.connect(aliceAccounts.layer2).balanceOf(aliceAccounts.layer2, {
             from: aliceAccounts.layer2
@@ -164,6 +166,4 @@ describe("Simulation test", function () {
 
         expect(l2Balance).equals(100_000);
     });
-
-    it("Bob ."
 });

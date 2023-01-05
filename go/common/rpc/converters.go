@@ -153,11 +153,6 @@ func ToBatchHeaderMsg(header *common.BatchHeader) *generated.BatchHeaderMsg {
 		return nil
 	}
 	var headerMsg generated.BatchHeaderMsg
-	withdrawalMsgs := make([]*generated.WithdrawalMsg, 0)
-	for _, withdrawal := range header.Withdrawals {
-		withdrawalMsg := generated.WithdrawalMsg{Amount: withdrawal.Amount.Bytes(), Recipient: withdrawal.Recipient.Bytes(), Contract: withdrawal.Contract.Bytes()}
-		withdrawalMsgs = append(withdrawalMsgs, &withdrawalMsg)
-	}
 
 	diff := uint64(0)
 	if header.Difficulty != nil {
@@ -180,7 +175,6 @@ func ToBatchHeaderMsg(header *common.BatchHeader) *generated.BatchHeaderMsg {
 		Extra:                       header.Extra,
 		R:                           header.R.Bytes(),
 		S:                           header.S.Bytes(),
-		Withdrawals:                 withdrawalMsgs,
 		UncleHash:                   header.UncleHash.Bytes(),
 		Coinbase:                    header.Coinbase.Bytes(),
 		Difficulty:                  diff,
@@ -248,7 +242,6 @@ func FromBatchHeaderMsg(header *generated.BatchHeaderMsg) *common.BatchHeader {
 		Extra:                         header.Extra,
 		R:                             r.SetBytes(header.R),
 		S:                             s.SetBytes(header.S),
-		Withdrawals:                   withdrawals,
 		UncleHash:                     gethcommon.BytesToHash(header.UncleHash),
 		Coinbase:                      gethcommon.BytesToAddress(header.Coinbase),
 		Difficulty:                    big.NewInt(int64(header.Difficulty)),

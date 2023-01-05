@@ -164,6 +164,17 @@ func NewEnclave(
 	rpcEncryptionManager := rpc.NewEncryptionManager(ecies.ImportECDSA(obscuroKey))
 
 	transactionBlobCrypto := crypto.NewTransactionBlobCryptoImpl(logger)
+
+	obscuroBridge := bridge.New(
+		config.ERC20ContractAddresses[0],
+		config.ERC20ContractAddresses[1],
+		mgmtContractLib,
+		erc20ContractLib,
+		transactionBlobCrypto,
+		config.ObscuroChainID,
+		config.L1ChainID,
+		logger,
+	)
 	memp := mempool.New(config.ObscuroChainID)
 
 	crossChainProcessors := crosschain.New(&config.MessageBusAddress, storage, big.NewInt(config.ObscuroChainID), logger)
@@ -174,6 +185,7 @@ func NewEnclave(
 		config.NodeType,
 		storage,
 		l1Blockchain,
+		obscuroBridge,
 		crossChainProcessors,
 		memp,
 		enclaveKey,

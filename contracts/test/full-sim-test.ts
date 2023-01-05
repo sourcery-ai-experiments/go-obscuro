@@ -8,8 +8,6 @@ import { ObsERC20 } from "../typechain-types/src/common/ObsERC20.sol";
 
 
 describe("Simulation test", function () {
-    return; 
-
     let l2Bridge: EthereumBridge;
     let l1Owner: Address 
     let l2Owner: Address
@@ -58,7 +56,7 @@ describe("Simulation test", function () {
 
     this.beforeAll(async function() {
         const l1Deployment = await hre.companionNetworks.layer1.deployments.get("ObscuroBridge");
-        const l2Deployment = await hre.deployments.get("ObscuroL2Bridge");
+        const l2Deployment = await hre.deployments.get("EthereumBridge");
 
         let L1Accounts = (await hre.companionNetworks.layer1.getNamedAccounts());
         let L2Accounts = (await hre.getNamedAccounts());
@@ -105,14 +103,14 @@ describe("Simulation test", function () {
     })
 
     it("Network has been initialized.", async function() {
-        const hocRead = await hre.deployments.read("ObscuroL2Bridge", {
+        const hocRead = await hre.deployments.read("EthereumBridge", {
             from: l2Owner,
         }, "remoteToLocalToken", tokens.hoc.layer1);
 
         expect(hocRead).is.properAddress;
         expect(hocRead).not.hexEqual("0x0");
 
-        const pocRead = await hre.deployments.read("ObscuroL2Bridge", {
+        const pocRead = await hre.deployments.read("EthereumBridge", {
             from: l2Owner,
         }, "remoteToLocalToken", tokens.poc.layer1);
 
@@ -145,7 +143,7 @@ describe("Simulation test", function () {
         const bridgeResult = l1Deployments.execute("ObscuroBridge", {
             from: aliceAccounts.layer1,
             log: false,
-        }, "sendAssets", tokens.hoc.layer1, 100_000, aliceAccounts.layer2);
+        }, "sendERC20", tokens.hoc.layer1, 100_000, aliceAccounts.layer2);
 
         await expect(bridgeResult).not.reverted;
 

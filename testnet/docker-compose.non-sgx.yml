@@ -28,7 +28,7 @@ services:
       "--l1NodeHost=$L1HOST",
       "--l1NodePort=$L1PORT",
       "--enclaveRPCAddress=enclave:11000",
-      "--rollupContractAddress=$MGMTCONTRACTADDR",
+      "--managementContractAddress=$MGMTCONTRACTADDR",
       "--privateKey=$PKSTRING",
       "--clientRPCHost=0.0.0.0",
       "--isGenesis=$ISGENESIS",
@@ -44,6 +44,7 @@ services:
       - default
     ports:
       - "6060:6060"
+      - "11000:11000"
     environment:
      - MGMTCONTRACTADDR=some_address
      - HOSTID=some_address

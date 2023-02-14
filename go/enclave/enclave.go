@@ -62,13 +62,6 @@ type enclaveImpl struct {
 
 	chain *l2chain.ObscuroChain
 
-	txCh   chan *common.L2Tx
-	exitCh chan bool
-
-	// Todo - disabled temporarily until TN1 is released
-	// speculativeWorkInCh  chan bool
-	// speculativeWorkOutCh chan speculativeWork
-
 	mgmtContractLib     mgmtcontractlib.MgmtContractLib
 	attestationProvider AttestationProvider // interface for producing attestation reports and verifying them
 
@@ -188,6 +181,11 @@ func NewEnclave(
 		genesis,
 		logger,
 	)
+	// ensure cached chain state data is up-to-date using the persisted batch data
+	err = chain.ResyncStateDB()
+	if err != nil {
+		logger.Crit("failed to resync L2 chain state DB after restart", log.ErrKey, err)
+	}
 
 	jsonConfig, _ := json.MarshalIndent(config, "", "  ")
 	logger.Info("Enclave service created with following config", log.CfgKey, string(jsonConfig))
@@ -202,8 +200,6 @@ func NewEnclave(
 		subscriptionManager:   subscriptionManager,
 		crossChainProcessors:  crossChainProcessors,
 		chain:                 chain,
-		txCh:                  make(chan *common.L2Tx),
-		exitCh:                make(chan bool),
 		mgmtContractLib:       mgmtContractLib,
 		attestationProvider:   attestationProvider,
 		enclaveKey:            enclaveKey,
@@ -233,30 +229,50 @@ func (e *enclaveImpl) StopClient() error {
 
 // SubmitL1Block is used to update the enclave with an additional L1 block.
 func (e *enclaveImpl) SubmitL1Block(block types.Block, receipts types.Receipts, isLatest bool) (*common.BlockSubmissionResponse, error) {
+	e.logger.Info("SubmitL1Block", log.BlockHeightKey, block.Number(), log.BlockHashKey, block.Hash())
 	// We update the enclave state based on the L1 block.
 	newL2Head, producedBatch, producedRollup, err := e.chain.ProcessL1Block(block, receipts, isLatest)
 	if err != nil {
-		e.logger.Trace("SubmitL1Block failed", "blk", block.Number(), "blkHash", block.Hash(), "err", err)
+		e.logger.Info("ProcessL1Block failed", log.BlockHeightKey, block.Number(), log.BlockHashKey, block.Hash(), log.ErrKey, err)
 		return nil, e.rejectBlockErr(fmt.Errorf("could not submit L1 block. Cause: %w", err))
 	}
-	e.logger.Trace("SubmitL1Block successful", "blk", block.Number(), "blkHash", block.Hash())
+	e.logger.Info("ProcessL1Block successful", log.BlockHeightKey, block.Number(), log.BlockHashKey, block.Hash())
 
 	// We prepare the block submission response.
 	blockSubmissionResponse := e.produceBlockSubmissionResponse(&block, newL2Head, producedBatch, producedRollup)
-	if blockSubmissionResponse.ProducedRollup != nil {
-		println("jjj produced a rollup")
-	}
+
+	e.logger.Info("produceBlockSubmissionResponse successful", log.BlockHeightKey, block.Number(), log.BlockHashKey, block.Hash(),
+		"newBatch", describeBSR(blockSubmissionResponse))
 	blockSubmissionResponse.ProducedSecretResponses = e.processNetworkSecretMsgs(block)
 
 	// We remove any transactions considered immune to re-orgs from the mempool.
 	if blockSubmissionResponse.ProducedBatch != nil {
 		err = e.removeOldMempoolTxs(blockSubmissionResponse.ProducedBatch.Header)
 		if err != nil {
+			e.logger.Error("removeOldMempoolTxs fail", log.BlockHeightKey, block.Number(), log.BlockHashKey, block.Hash(), log.ErrKey, err)
 			return nil, e.rejectBlockErr(fmt.Errorf("could not remove transactions from mempool. Cause: %w", err))
 		}
 	}
 
 	return blockSubmissionResponse, nil
+}
+
+// useful description of the BSR for debugging
+func describeBSR(response *common.BlockSubmissionResponse) string {
+	if response.RejectError != nil {
+		return fmt.Sprintf("BlockSubmissionResponse failed with err=%s", response.RejectError.Error())
+	}
+	producedBatch := "no batch produced"
+	if response.ProducedBatch != nil {
+		producedBatch = fmt.Sprintf("newBatch{num=%d, numTx=%d, hash=%s}",
+			response.ProducedBatch.Header.Number, len(response.ProducedBatch.TxHashes), response.ProducedBatch.Hash())
+	}
+	producedRollup := "no rollup produced"
+	if response.ProducedRollup != nil {
+		producedBatch = fmt.Sprintf("newRollup{num=%d, numBatches=%d, hash=%s}",
+			response.ProducedRollup.Header.Number, len(response.ProducedRollup.Batches), response.ProducedRollup.Hash())
+	}
+	return fmt.Sprintf("%s, %s", producedBatch, producedRollup)
 }
 
 func (e *enclaveImpl) SubmitTx(tx common.EncryptedTx) (common.EncryptedResponseSendRawTx, error) {
@@ -278,6 +294,13 @@ func (e *enclaveImpl) SubmitTx(tx common.EncryptedTx) (common.EncryptedResponseS
 		return nil, err
 	}
 
+	// Only the sequencer needs to maintain a transaction mempool. Other node types can return early.
+	if e.config.NodeType == common.Sequencer {
+		if err = e.mempool.AddMempoolTx(decryptedTx); err != nil {
+			return nil, err
+		}
+	}
+
 	txHashBytes := []byte(decryptedTx.Hash().Hex())
 	viewingKeyAddress, err := rpc.GetSender(decryptedTx)
 	if err != nil {
@@ -288,23 +311,11 @@ func (e *enclaveImpl) SubmitTx(tx common.EncryptedTx) (common.EncryptedResponseS
 		return nil, fmt.Errorf("enclave could not respond securely to eth_sendRawTransaction request. Cause: %w", err)
 	}
 
-	// Only the sequencer needs to maintain a transaction mempool. Other node types can return early.
-	if e.config.NodeType != common.Sequencer {
-		return encryptedResult, nil
-	}
-
-	if err = e.mempool.AddMempoolTx(decryptedTx); err != nil {
-		return nil, err
-	}
-
-	if e.config.SpeculativeExecution {
-		e.txCh <- decryptedTx
-	}
-
 	return encryptedResult, nil
 }
 
 func (e *enclaveImpl) SubmitBatch(extBatch *common.ExtBatch) error {
+	e.logger.Info("SubmitBatch", "height", extBatch.Header.Number, "hash", extBatch.Hash(), "l1", extBatch.Header.L1Proof)
 	batch := core.ToBatch(extBatch, e.transactionBlobCrypto)
 	if err := e.chain.UpdateL2Chain(batch); err != nil {
 		return fmt.Errorf("could not update L2 chain based on batch. Cause: %w", err)
@@ -644,10 +655,6 @@ func (e *enclaveImpl) Unsubscribe(id gethrpc.ID) error {
 }
 
 func (e *enclaveImpl) Stop() error {
-	if e.config.SpeculativeExecution {
-		e.exitCh <- true
-	}
-
 	if e.profiler != nil {
 		return e.profiler.Stop()
 	}
@@ -857,7 +864,7 @@ func (e *enclaveImpl) HealthCheck() (bool, error) {
 	storageHealthy, err := e.storage.HealthCheck()
 	if err != nil {
 		// simplest iteration, log the error and just return that it's not healthy
-		e.logger.Error("unable to HealthCheck enclave storage", "err", err)
+		e.logger.Error("unable to HealthCheck enclave storage", log.ErrKey, err)
 		return false, nil
 	}
 	// TODO enclave healthcheck operations
@@ -1085,24 +1092,3 @@ func (e *enclaveImpl) rejectBlockErr(cause error) *common.BlockRejectError {
 		Wrapped: cause,
 	}
 }
-
-// Todo - reinstate speculative execution after TN1
-/*
-// internal structure to pass information.
-type speculativeWork struct {
-	found bool
-	r     *obscurocore.Rollup
-	s     *state.StateDB
-	h     *nodecommon.Header
-	txs   []*nodecommon.L2Tx
-}
-
-// internal structure used for the speculative execution.
-type processingEnvironment struct {
-	headRollup      *obscurocore.Rollup              // the current head rollup, which will be the parent of the new rollup
-	header          *nodecommon.Header               // the header of the new rollup
-	processedTxs    []*nodecommon.L2Tx               // txs that were already processed
-	processedTxsMap map[common.Hash]*nodecommon.L2Tx // structure used to prevent duplicates
-	state           *state.StateDB                   // the state as calculated from the previous rollup and the processed transactions
-}
-*/

@@ -102,8 +102,6 @@ func (b *BatchHeader) Hash() L2RootHash {
 func (b *BatchHeader) ToRollupHeader(parentRollupHeader *RollupHeader) *RollupHeader {
 	header := &RollupHeader{
 		// The fields copied directly from the batch header.
-		ParentHash:                    b.ParentHash,
-		UncleHash:                     b.UncleHash,
 		Coinbase:                      b.Coinbase,
 		Root:                          b.Root,
 		ReceiptHash:                   b.ReceiptHash,

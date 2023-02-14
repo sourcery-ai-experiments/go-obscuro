@@ -100,12 +100,14 @@ func (oc *ObscuroChain) ProcessL1Block(block types.Block, receipts types.Receipt
 	defer oc.blockProcessingMutex.Unlock()
 
 	// We update the L1 chain state.
+	oc.logger.Info("updateL1State (entered mutex)", log.BlockHeightKey, block.NumberU64(), log.BlockHashKey, block.Hash())
 	l1IngestionType, err := oc.updateL1State(block, receipts, isLatest)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	// We update the L1 and L2 chain heads.
+	oc.logger.Info("updateL1AndL2Heads", log.BlockHeightKey, block.NumberU64(), log.BlockHashKey, block.Hash())
 	newL2Head, producedBatch, producedRollup, err := oc.updateL1AndL2Heads(&block, l1IngestionType)
 	if err != nil {
 		return nil, nil, nil, err
@@ -303,7 +305,7 @@ func (oc *ObscuroChain) insertBlockIntoL1Chain(block *types.Block, isLatest bool
 			return nil, common.ErrBlockAncestorNotFound
 		}
 		oc.logger.Trace("parent not found",
-			"blkHeight", block.NumberU64(), "blkHash", block.Hash(),
+			"blkHeight", block.NumberU64(), log.BlockHashKey, block.Hash(),
 			"l1HeadHeight", prevL1Head.NumberU64(), "l1HeadHash", prevL1Head.Hash(),
 			"lcaHeight", lcaBlock.NumberU64(), "lcaHash", lcaBlock.Hash(),
 		)
@@ -315,7 +317,7 @@ func (oc *ObscuroChain) insertBlockIntoL1Chain(block *types.Block, isLatest bool
 			// lca > prevL1Head:
 			//   this would imply ingested block is earlier on the same branch as l1 head, but ingested block should not have been seen before
 			oc.logger.Error("unexpected blockchain state, incoming block is not child of L1 head and not an earlier fork of L1 head",
-				"blkHeight", block.NumberU64(), "blkHash", block.Hash(),
+				"blkHeight", block.NumberU64(), log.BlockHashKey, block.Hash(),
 				"l1HeadHeight", prevL1Head.NumberU64(), "l1HeadHash", prevL1Head.Hash(),
 				"lcaHeight", lcaBlock.NumberU64(), "lcaHash", lcaBlock.Hash(),
 			)
@@ -341,19 +343,11 @@ func (oc *ObscuroChain) updateL1AndL2Heads(block *types.Block, ingestionType *bl
 		}
 	}
 
-	if oc.nodeType == common.Sequencer {
-		println("jjj here 1")
-	}
-
 	// We process the rollups, updating the head rollup associated with the L1 block as we go.
 	rollupsInBlock, err := oc.processRollups(block)
 	if err != nil {
 		// TODO - #718 - Determine correct course of action if one or more rollups are invalid.
 		oc.logger.Error("could not process rollups", log.ErrKey, err)
-	}
-
-	if oc.nodeType == common.Sequencer && rollupsInBlock {
-		println("jjj here 2")
 	}
 
 	// We determine whether we have produced a genesis batch yet.
@@ -432,8 +426,8 @@ func (oc *ObscuroChain) produceAndStoreBatch(block *common.L1Block, genesisBatch
 
 // Produces a new rollup, signs it and stores it.
 func (oc *ObscuroChain) produceAndStoreRollup(block *types.Block, producedBatch *core.Batch) (*core.Rollup, error) {
-	parentRollup, err := oc.storage.FetchHeadRollupForBlock(&block.Header().ParentHash)
-	if err != nil && !errors.Is(err, errutil.ErrNotFound) {
+	parentRollup, err := oc.getLatestRollupBeforeBlock(block)
+	if err != nil && !errors.Is(err, db.ErrNoRollups) {
 		return nil, fmt.Errorf("could not retrieve head rollup. Cause: %w", err)
 	}
 	var parentRollupHeader *common.RollupHeader
@@ -589,6 +583,89 @@ func (oc *ObscuroChain) processState(batch *core.Batch, txs []*common.L2Tx, stat
 	return rootHash, executedTransactions, txReceipts, synthReceipts
 }
 
+// ResyncStateDB can be called to ensure stateDB data is available for the canonical L2 batch chain
+// After an (ungraceful) shutdown this method must be called to rebuild the stateDB data based on the persisted batches
+func (oc *ObscuroChain) ResyncStateDB() error {
+	batch, err := oc.storage.FetchHeadBatch()
+	if err != nil {
+		if errors.Is(err, errutil.ErrNotFound) {
+			// there is no head batch, this is probably a new node - there is no state to rebuild
+			oc.logger.Info("no head batch found in DB after restart", log.ErrKey, err)
+			return nil
+		}
+		return fmt.Errorf("unexpected error fetching head batch to resync- %w", err)
+	}
+	if !stateDBAvailableForBatch(oc.storage, batch.Hash()) {
+		oc.logger.Info("state not available for latest batch after restart - rebuilding stateDB cache from batches")
+		err = oc.replayBatchesToValidState()
+		if err != nil {
+			return fmt.Errorf("unable to replay batches to restore valid state - %w", err)
+		}
+	}
+	return nil
+}
+
+// replayBatchesToValidState is used to repopulate the stateDB cache with data from persisted batches. Two step process:
+// 1. step backwards from head batch until we find a batch that is already in stateDB cache, builds list of batches to replay
+// 2. iterate that list of batches from the earliest, process the transactions to calculate and cache the stateDB
+// todo: get unit test coverage around this (and L2 Chain code more widely, see ticket #1416 )
+func (oc *ObscuroChain) replayBatchesToValidState() error {
+	// this slice will be a stack of batches to replay as we walk backwards in search of latest valid state
+	// todo: consider capping the size of this batch list using FIFO to avoid memory issues, and then repeating as necessary
+	var batchesToReplay []*core.Batch
+	// `batchToReplayFrom` variable will eventually be the latest batch for which we are able to produce a StateDB
+	// - we will then set that as the head of the L2 so that this node can rebuild its missing state
+	batchToReplayFrom, err := oc.storage.FetchHeadBatch()
+	if err != nil {
+		return fmt.Errorf("no head batch found in DB but expected to replay batches - %w", err)
+	}
+	// loop backwards building a slice of all batches that don't have cached stateDB data available
+	for !stateDBAvailableForBatch(oc.storage, batchToReplayFrom.Hash()) {
+		batchesToReplay = append(batchesToReplay, batchToReplayFrom)
+		if batchToReplayFrom.NumberU64() == 0 {
+			// no more parents to check, replaying from genesis
+			break
+		}
+		batchToReplayFrom, err = oc.storage.FetchBatch(batchToReplayFrom.Header.ParentHash)
+		if err != nil {
+			return fmt.Errorf("unable to fetch previous batch while rolling back to stable state - %w", err)
+		}
+	}
+	oc.logger.Info("replaying batch data into stateDB cache", "fromBatch", batchesToReplay[len(batchesToReplay)-1].NumberU64(),
+		"toBatch", batchesToReplay[0].NumberU64())
+	// loop through the slice of batches without stateDB data (starting with the oldest) and reprocess them to update cache
+	for i := len(batchesToReplay) - 1; i >= 0; i-- {
+		batch := batchesToReplay[i]
+
+		// if genesis batch then create the genesis state before continuing on with remaining batches
+		if batch.NumberU64() == 0 {
+			err := oc.genesis.CommitGenesisState(oc.storage)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		prevState, err := oc.storage.CreateStateDB(batch.Header.ParentHash)
+		if err != nil {
+			return err
+		}
+		// we don't need the return values, just want the post-batch state to be cached
+		oc.processState(batch, batch.Transactions, prevState)
+	}
+
+	return nil
+}
+
+// The enclave caches a stateDB instance against each batch hash, this is the input state when producing the following
+// batch in the chain and is used to query state at a certain height.
+//
+// This method checks if the stateDB data is available for a given batch hash (so it can be restored if not)
+func stateDBAvailableForBatch(storage db.Storage, hash *common.L2RootHash) bool {
+	_, err := storage.CreateStateDB(*hash)
+	return err == nil
+}
+
 // Checks the internal validity of the batch.
 func (oc *ObscuroChain) isInternallyValidBatch(batch *core.Batch) (types.Receipts, error) {
 	stateDB, err := oc.storage.CreateStateDB(batch.Header.ParentHash)
@@ -660,7 +737,7 @@ func (oc *ObscuroChain) signBatch(batch *core.Batch) error {
 
 func (oc *ObscuroChain) signRollup(rollup *core.Rollup) error {
 	var err error
-	h := rollup.Hash()
+	h := rollup.Header.Hash()
 	rollup.Header.R, rollup.Header.S, err = ecdsa.Sign(rand.Reader, oc.enclavePrivateKey, h[:])
 	if err != nil {
 		return fmt.Errorf("could not sign rollup. Cause: %w", err)
@@ -833,10 +910,9 @@ func (oc *ObscuroChain) isAccountContractAtBlock(accountAddr gethcommon.Address,
 // Validates and stores the rollup in a given block.
 // TODO - #718 - Design a mechanism to detect a case where the rollups never contain any batches (despite batches arriving via P2P).
 func (oc *ObscuroChain) processRollups(block *common.L1Block) (bool, error) {
-	l1ParentHash := block.ParentHash()
-	currentHeadRollup, err := oc.storage.FetchHeadRollupForBlock(&l1ParentHash)
-	if err != nil && !errors.Is(err, errutil.ErrNotFound) {
-		return false, fmt.Errorf("could not fetch current L2 head rollup")
+	currentHeadRollup, err := oc.getLatestRollupBeforeBlock(block)
+	if err != nil && !errors.Is(err, db.ErrNoRollups) {
+		return false, fmt.Errorf("unexpected error retrieving latest rollup for block %s. Cause: %w", block.Hash(), err)
 	}
 
 	rollups := oc.rollupExtractor.ExtractRollups(block, oc.storage)
@@ -850,8 +926,8 @@ func (oc *ObscuroChain) processRollups(block *common.L1Block) (bool, error) {
 		return false, fmt.Errorf("received rollup with number %d but no genesis rollup is stored", rollups[0].Number())
 	}
 
+	blockHash := block.Hash()
 	for idx, rollup := range rollups {
-		println(fmt.Sprintf("jjj in block %d processing rollup %d with hash %s", block.NumberU64(), rollup.NumberU64(), rollup.Hash()))
 		if err = oc.checkSequencerSignature(rollup.Hash(), &rollup.Header.Agg, rollup.Header.R, rollup.Header.S); err != nil {
 			return false, fmt.Errorf("rollup signature was invalid. Cause: %w", err)
 		}
@@ -886,7 +962,46 @@ func (oc *ObscuroChain) processRollups(block *common.L1Block) (bool, error) {
 		}
 	}
 
+	// we record the latest rollup published against this L1 block hash
+	// note: if no rollup published yet then we record the empty hash as a marker
+	rollupHash := &gethcommon.Hash{}
+	if currentHeadRollup != nil {
+		rollupHash = currentHeadRollup.Hash()
+	}
+
+	err = oc.storage.UpdateHeadRollup(&blockHash, rollupHash)
+	if err != nil {
+		return false, fmt.Errorf("unable to update head rollup - %w", err)
+	}
+
 	return len(rollups) > 0, nil
+}
+
+// Given a block, returns the latest rollup in the canonical chain for that block (excluding those in the block itself).
+func (oc *ObscuroChain) getLatestRollupBeforeBlock(block *common.L1Block) (*core.Rollup, error) {
+	for {
+		blockParentHash := block.ParentHash()
+		latestRollup, err := oc.storage.FetchHeadRollupForBlock(&blockParentHash)
+		if err != nil && !errors.Is(err, errutil.ErrNotFound) {
+			return nil, fmt.Errorf("could not fetch current L2 head rollup - %w", err)
+		}
+		if latestRollup != nil {
+			return latestRollup, nil
+		}
+
+		// we scan backwards now to the prev block in the chain and we will lookup to see if that has an entry
+		// todo: is this still required for safety, even though we're storing an entry for every L1 block?
+		block, err = oc.storage.FetchBlock(block.ParentHash())
+		if err != nil {
+			if errors.Is(err, errutil.ErrNotFound) {
+				// No more blocks available (enclave does not read the L1 chain from genesis if it knows
+				// when management contract was deployed, so we don't keep going to block zero, we just stop when the blocks run out)
+				// We have now checked through the entire (relevant) history of the L1 and no rollups were found.
+				return nil, db.ErrNoRollups
+			}
+			return nil, fmt.Errorf("could not fetch parent block - %w", err)
+		}
+	}
 }
 
 // Checks that the rollup:
@@ -894,6 +1009,11 @@ func (oc *ObscuroChain) processRollups(block *common.L1Block) (bool, error) {
 //   - Links to the previous rollup by hash
 //   - Has a first batch whose parent is the head batch of the previous rollup
 func (oc *ObscuroChain) checkRollupsCorrectlyChained(rollup *core.Rollup, previousRollup *core.Rollup) error {
+	if rollup.Header.Hash() == previousRollup.Header.Hash() {
+		oc.logger.Error("Attempting to check the same rollup.")
+		return nil
+	}
+
 	if big.NewInt(0).Sub(rollup.Header.Number, previousRollup.Header.Number).Cmp(big.NewInt(1)) != 0 {
 		return fmt.Errorf("found gap in rollups between rollup %d and rollup %d",
 			previousRollup.Header.Number, rollup.Header.Number)

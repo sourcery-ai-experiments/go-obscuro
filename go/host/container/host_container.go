@@ -106,13 +106,14 @@ func NewHostContainerFromConfig(parsedConfig *config.HostInputConfig) *HostConta
 	// set the Host ID as the Public Key Address
 	cfg.ID = ethWallet.Address()
 
+	fmt.Println("Connecting to the enclave...")
 	enclaveClient := enclaverpc.NewClient(cfg, logger)
 	p2pLogger := logger.New(log.CmpKey, log.P2PCmp)
 	metricsService := metrics.New(cfg.MetricsEnabled, cfg.MetricsHTTPPort, logger)
 	aggP2P := p2p.NewSocketP2PLayer(cfg, p2pLogger, metricsService.Registry())
 	rpcServer := clientrpc.NewServer(cfg, logger)
 
-	mgmtContractLib := mgmtcontractlib.NewMgmtContractLib(&cfg.RollupContractAddress, logger)
+	mgmtContractLib := mgmtcontractlib.NewMgmtContractLib(&cfg.ManagementContractAddress, logger)
 
 	return NewHostContainer(cfg, aggP2P, l1Client, enclaveClient, mgmtContractLib, ethWallet, rpcServer, logger, metricsService)
 }

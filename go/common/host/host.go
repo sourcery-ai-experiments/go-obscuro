@@ -66,6 +66,9 @@ type P2P interface {
 	HealthCheck() bool
 }
 
+type P2PListener interface {
+}
+
 // ReconnectingBlockProvider interface allows host to monitor and await L1 blocks.
 //
 // The stream channels provide the blocks the way the enclave expects to be fed (consecutive canonical blocks)

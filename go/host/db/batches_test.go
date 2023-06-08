@@ -21,7 +21,7 @@ func TestCanStoreAndRetrieveBatchHeader(t *testing.T) {
 		Header: &header,
 	}
 
-	err := db.AddBatchHeader(&batch)
+	err := db.AddBatch(&batch)
 	if err != nil {
 		t.Errorf("could not store batch header. Cause: %s", err)
 	}
@@ -54,7 +54,7 @@ func TestHigherNumberBatchBecomesBatchHeader(t *testing.T) { //nolint:dupl
 		Header: &headerOne,
 	}
 
-	err := db.AddBatchHeader(&batchOne)
+	err := db.AddBatch(&batchOne)
 	if err != nil {
 		t.Errorf("could not store batch header. Cause: %s", err)
 	}
@@ -67,7 +67,7 @@ func TestHigherNumberBatchBecomesBatchHeader(t *testing.T) { //nolint:dupl
 		Header: &headerTwo,
 	}
 
-	err = db.AddBatchHeader(&batchTwo)
+	err = db.AddBatch(&batchTwo)
 	if err != nil {
 		t.Errorf("could not store batch header. Cause: %s", err)
 	}
@@ -90,7 +90,7 @@ func TestLowerNumberBatchDoesNotBecomeBatchHeader(t *testing.T) { //nolint:dupl
 		Header: &headerOne,
 	}
 
-	err := db.AddBatchHeader(&batchOne)
+	err := db.AddBatch(&batchOne)
 	if err != nil {
 		t.Errorf("could not store batch header. Cause: %s", err)
 	}
@@ -103,7 +103,7 @@ func TestLowerNumberBatchDoesNotBecomeBatchHeader(t *testing.T) { //nolint:dupl
 		Header: &headerTwo,
 	}
 
-	err = db.AddBatchHeader(&batchTwo)
+	err = db.AddBatch(&batchTwo)
 	if err != nil {
 		t.Errorf("could not store batch header. Cause: %s", err)
 	}
@@ -135,7 +135,7 @@ func TestCanRetrieveBatchHashByNumber(t *testing.T) {
 		Header: &header,
 	}
 
-	err := db.AddBatchHeader(&batch)
+	err := db.AddBatch(&batch)
 	if err != nil {
 		t.Errorf("could not store batch header. Cause: %s", err)
 	}
@@ -170,7 +170,7 @@ func TestCanRetrieveBatchNumberByTxHash(t *testing.T) {
 		TxHashes: []gethcommon.Hash{txHash},
 	}
 
-	err := db.AddBatchHeader(&batch)
+	err := db.AddBatch(&batch)
 	if err != nil {
 		t.Errorf("could not store batch header. Cause: %s", err)
 	}
@@ -204,7 +204,7 @@ func TestCanRetrieveBatchTransactions(t *testing.T) {
 		TxHashes: txHashes,
 	}
 
-	err := db.AddBatchHeader(&batch)
+	err := db.AddBatch(&batch)
 	if err != nil {
 		t.Errorf("could not store batch header. Cause: %s", err)
 	}
@@ -243,7 +243,7 @@ func TestCanRetrieveTotalNumberOfTransactions(t *testing.T) {
 		TxHashes: txHashesOne,
 	}
 
-	err := db.AddBatchHeader(&batchOne)
+	err := db.AddBatch(&batchOne)
 	if err != nil {
 		t.Errorf("could not store batch header. Cause: %s", err)
 	}
@@ -257,7 +257,7 @@ func TestCanRetrieveTotalNumberOfTransactions(t *testing.T) {
 		TxHashes: txHashesTwo,
 	}
 
-	err = db.AddBatchHeader(&batchTwo)
+	err = db.AddBatch(&batchTwo)
 	if err != nil {
 		t.Errorf("could not store batch header. Cause: %s", err)
 	}

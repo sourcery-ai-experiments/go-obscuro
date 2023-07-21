@@ -315,6 +315,10 @@ func (p *Service) broadcast(msg message) error {
 
 	var wg sync.WaitGroup
 	for _, address := range p.peerAddresses {
+		if address == p.ourAddress {
+			// Don't broadcast to ourselves
+			continue
+		}
 		wg.Add(1)
 		go p.sendBytesWithRetry(&wg, address, msgEncoded) //nolint: errcheck
 	}

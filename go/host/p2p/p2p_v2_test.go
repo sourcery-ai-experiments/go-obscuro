@@ -25,7 +25,7 @@ func TestValidatorAndSequencerCommunication(t *testing.T) {
 		t.Fatalf("Failed to send ping: %v", err)
 	}
 
-	seq.BroadcastHello()
+	seq.Broadcast([]byte("hey guys this is sequencer"))
 
 	// A short delay to let asynchronous actions complete
 	time.Sleep(time.Millisecond * 100)
@@ -65,7 +65,7 @@ func TestMultipleValidatorsAndSequencerCommunication(t *testing.T) {
 	// Allow enough time for all validators to send their ping messages and get responses
 	time.Sleep(interval * time.Duration(validatorCount+1))
 
-	seq.BroadcastHello()
+	seq.Broadcast([]byte("hey guys this is sequencer"))
 
 	// A short delay to let asynchronous actions complete
 	time.Sleep(time.Millisecond * 100)

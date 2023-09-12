@@ -98,11 +98,11 @@ func NewSequencer(addr string) *Sequencer {
 	return s
 }
 
-func (s *Sequencer) BroadcastHello() {
+func (s *Sequencer) Broadcast(data []byte) {
 	for _, client := range s.clients {
 		c := client
 		go func() {
-			err := c.WriteMessage(websocket.TextMessage, []byte("Hello from sequencer"))
+			err := c.WriteMessage(websocket.TextMessage, data)
 			if err != nil {
 				fmt.Println(err)
 			}

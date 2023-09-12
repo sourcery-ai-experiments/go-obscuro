@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// todo add test for connections failed and re
+
 func TestValidatorAndSequencerCommunication(t *testing.T) {
 	// Starting a Sequencer on a test address
 	addr := "localhost:8080"

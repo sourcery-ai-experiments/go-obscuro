@@ -232,6 +232,7 @@ jobs:
                -log_level=${{ github.event.inputs.log_level }} \
                -batch_interval=${{vars.BATCH_INTERVAL}} \
                -rollup_interval=${{vars.ROLLUP_INTERVAL}} \
+               -l1_chain_id=${{vars.L1_CHAIN_ID}} \
                start'
 
 

@@ -105,6 +105,61 @@ async function authenticateAccountWithObscuroGateway(ethereum, account, userID) 
     return await authenticateResp.text()
 }
 
+async function authenticateAccountWithObscuroGatewayEIP712(ethereum, account, userID) {
+    const isAuthenticated = await accountIsAuthenticated(account, userID)
+
+    if (isAuthenticated) {
+        return "Account is already authenticated"
+    }
+
+    const typedData = {
+        types: {
+            EIP712Domain: [
+                { name: "name", type: "string" },
+                { name: "version", type: "string" },
+                { name: "chainId", type: "uint256" },
+                { name: "verifyingContract", type: "address" },
+            ],
+            Register: [
+                { name: "userID", type: "string" },
+                { name: "account", type: "address" },
+            ],
+        },
+        primaryType: "Register",
+        domain: {
+            name: "Obscuro",
+            version: "1",
+            chainId: obscuroChainIDDecimal,
+            verifyingContract: "0x0000000000000000000000000000000000000000",
+        },
+        message: {
+            userID: "0x"+userID.substring(0,40), // TODO: Implement that also on backend..
+            account: account.toLowerCase(),
+        },
+    };
+
+    const data = JSON.stringify(typedData);
+    const signature = await ethereum.request({
+        method: "eth_signTypedData_v4",
+        params: [account, data],
+    }).catch(_ => {
+        console.log("signing failed!")
+        return -1;
+    });
+
+
+    const authenticateUserURL = pathAuthenticate+"?u="+userID
+    const authenticateFields = {"signature": signature, "message": textToSign}
+    const authenticateResp = await fetch(
+        authenticateUserURL, {
+            method: methodPost,
+            headers: jsonHeaders,
+            body: JSON.stringify(authenticateFields)
+        }
+    );
+    return await authenticateResp.text()
+}
+
 async function accountIsAuthenticated(account, userID) {
     const queryAccountUserID = pathQuery+"?u="+userID+"&a="+account
     const isAuthenticatedResponse = await fetch(
@@ -289,8 +344,9 @@ const initialize = async () => {
             statusArea.innerText = "No MetaMask accounts found."
             return
         }
-        let authenticateAccountStatus = await authenticateAccountWithObscuroGateway(ethereum, account, userID)
+        let authenticateAccountStatus = await authenticateAccountWithObscuroGatewayEIP712(ethereum, account, userID)
         //statusArea.innerText = "\n Authentication status: " + authenticateAccountStatus
+        console.log(authenticateAccountStatus)
         accountsTable.style.display = "block"
         await populateAccountsTable(document, tableBody, userID)
     })

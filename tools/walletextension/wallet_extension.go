@@ -220,6 +220,10 @@ func (w *WalletExtension) AddAddressToUser(hexUserID string, message string, sig
 
 	addressFromMessage := gethcommon.HexToAddress(messageAddressHex)
 
+	// test EIP-712 signature checks
+	testValid, err := verifySignatureAuthenticateEIP712(hexUserID, signature, addressFromMessage)
+	fmt.Printf("Signature for account %s is: %t \n", addressFromMessage, testValid)
+
 	// check if message was signed by the correct address and if signature is valid
 	valid, err := verifySignature(message, signature, addressFromMessage)
 	if !valid && err != nil {
@@ -420,4 +424,95 @@ func (w *WalletExtension) checkParametersForInterceptedGetStorageAt(params []int
 
 func (w *WalletExtension) Version() string {
 	return w.version
+}
+
+// EIP712Type represents individual types for EIP-712.
+type EIP712Type struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// EIP712Domain defines the domain for EIP-712.
+type EIP712Domain struct {
+	Name              string             `json:"name"`
+	Version           string             `json:"version"`
+	ChainID           *big.Int           `json:"chainId"`
+	VerifyingContract gethcommon.Address `json:"verifyingContract"`
+}
+
+// RegisterMessage represents the message data for the "Register" type.
+type RegisterMessage struct {
+	UserID  string             `json:"userID"`
+	Account gethcommon.Address `json:"account"`
+}
+
+// AuthenticateTypedData defines the overall structure for EIP-712 typed data.
+type AuthenticateTypedData struct {
+	Types       map[string][]EIP712Type `json:"types"`
+	PrimaryType string                  `json:"primaryType"`
+	Domain      EIP712Domain            `json:"domain"`
+	Message     RegisterMessage         `json:"message"`
+}
+
+func CreateAuthenticateTypedData(userID string, account gethcommon.Address, chainID *big.Int, contractAddress gethcommon.Address) AuthenticateTypedData {
+	return AuthenticateTypedData{
+		Types: map[string][]EIP712Type{
+			"EIP712Domain": {
+				{Name: "name", Type: "string"},
+				{Name: "version", Type: "string"},
+				{Name: "chainId", Type: "uint256"},
+				{Name: "verifyingContract", Type: "address"},
+			},
+			"Register": {
+				{Name: "userID", Type: "string"},
+				{Name: "account", Type: "address"},
+			},
+		},
+		PrimaryType: "Register",
+		Domain: EIP712Domain{
+			Name:              "Your DApp Name", // Adjust this if needed
+			Version:           "1",
+			ChainID:           chainID,
+			VerifyingContract: contractAddress,
+		},
+		Message: RegisterMessage{
+			UserID:  userID,
+			Account: account,
+		},
+	}
+}
+
+func verifySignatureAuthenticateEIP712(userID string, signature []byte, account gethcommon.Address) (bool, error) {
+	if len(signature) != common.SignatureLen {
+		return false, errors.New("incorrect signature length")
+	}
+	// TODO: Should we get those values from config? + Check contract address value
+	contractAddress := gethcommon.HexToAddress("0x0000000000000000000000000000000000000000")
+	chainID := big.NewInt(443)
+
+	// Populate the typed data
+	typedData := CreateAuthenticateTypedData(userID, account, chainID, contractAddress)
+
+	// Compute the hash of typedData
+	dataHash := hashTypedData(typedData) // TODO: Implement hashTypedData
+
+	// Recover the public key from the signature
+	r, s, v := signature[:32], signature[32:64], signature[64]
+	if v < 27 {
+		v += 27
+	}
+
+	pubKeyECDSA, err := crypto.SigToPub(dataHash, append(r, append(s, v)...))
+	if err != nil {
+		return false, err
+	}
+
+	recoveredAddr := crypto.PubkeyToAddress(*pubKeyECDSA)
+
+	// Compare the addresses
+	if recoveredAddr == account {
+		return true, nil
+	}
+
+	return false, nil
 }

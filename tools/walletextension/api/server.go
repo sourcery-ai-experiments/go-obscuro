@@ -11,7 +11,6 @@ import (
 	"github.com/obscuronet/go-obscuro/tools/walletextension/common"
 )
 
-//go:embed static
 //go:embed staticOG
 var staticFiles embed.FS
 
@@ -62,13 +61,7 @@ func createHTTPServer(address string, routes []Route) *http.Server {
 		serveMux.HandleFunc(route.Name, route.Func)
 	}
 
-	// Serves the web assets for the management of viewing keys.
-	noPrefixStaticFiles, err := fs.Sub(staticFiles, staticDir)
-	if err != nil {
-		panic(fmt.Sprintf("could not serve static files. Cause: %s", err))
-	}
-	serveMux.Handle(common.PathViewingKeys, http.StripPrefix(common.PathViewingKeys, http.FileServer(http.FS(noPrefixStaticFiles))))
-
+	// Serves the web assets for Obscuro Gateway
 	noPrefixStaticFilesOG, err := fs.Sub(staticFiles, staticDirOG)
 	if err != nil {
 		panic(fmt.Errorf("could not serve static files. Cause: %w", err).Error())

@@ -26,9 +26,6 @@ const (
 const (
 	PathRoot                            = "/"
 	PathReady                           = "/ready/"
-	PathViewingKeys                     = "/viewingkeys/"
-	PathGenerateViewingKey              = "/generateviewingkey/"
-	PathSubmitViewingKey                = "/submitviewingkey/"
 	PathJoin                            = "/join/"
 	PathAuthenticate                    = "/authenticate/"
 	PathQuery                           = "/query/"

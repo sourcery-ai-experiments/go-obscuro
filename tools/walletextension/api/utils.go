@@ -18,7 +18,7 @@ func parseRequest(body []byte) (*common.RPCRequest, error) {
 	err := json.Unmarshal(body, &reqJSONMap)
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal JSON-RPC request body to JSON: %s. "+
-			"If you're trying to generate a viewing key, visit %s", err, common.PathViewingKeys)
+			"If you're trying to join, visit Obscuro Gateway %s", err, common.PathRoot)
 	}
 
 	reqID := reqJSONMap[common.JSONKeyID]

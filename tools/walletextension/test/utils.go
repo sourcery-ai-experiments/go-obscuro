@@ -170,6 +170,7 @@ func prepareRequestBody(method string, params interface{}) []byte {
 }
 
 // Generates a new account and registers it with the node.
+// TODO (@ziga) - check where this is used
 func simulateViewingKeyRegister(t *testing.T, walletHTTPPort, walletWSPort int, useWS bool) (*gethcommon.Address, []byte, []byte) {
 	accountPrivateKey, err := crypto.GenerateKey()
 	if err != nil {
@@ -177,44 +178,28 @@ func simulateViewingKeyRegister(t *testing.T, walletHTTPPort, walletWSPort int, 
 	}
 	accountAddr := crypto.PubkeyToAddress(accountPrivateKey.PublicKey)
 
-	compressedHexVKBytes := generateViewingKey(walletHTTPPort, walletWSPort, accountAddr.String(), useWS)
-	mmSignature := signViewingKey(accountPrivateKey, compressedHexVKBytes)
-	submitViewingKey(accountAddr.String(), walletHTTPPort, walletWSPort, mmSignature, useWS)
+	// compressedHexVKBytes := generateViewingKey(walletHTTPPort, walletWSPort, accountAddr.String(), useWS)
+	// mmSignature := signViewingKey(accountPrivateKey, compressedHexVKBytes)
+	// submitViewingKey(accountAddr.String(), walletHTTPPort, walletWSPort, mmSignature, useWS)
 
-	// transform the metamask signature to the geth compatible one
-	sigStr := hex.EncodeToString(mmSignature)
-	// and then we extract the signature bytes in the same way as the wallet extension
-	outputSig, err := hex.DecodeString(sigStr[2:])
-	if err != nil {
-		panic(fmt.Errorf("failed to decode signature string: %w", err))
-	}
-	// This same change is made in geth internals, for legacy reasons to be able to recover the address:
-	//	https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L452-L459
-	outputSig[64] -= 27
+	//// transform the metamask signature to the geth compatible one
+	//sigStr := hex.EncodeToString(mmSignature)
+	//// and then we extract the signature bytes in the same way as the wallet extension
+	//outputSig, err := hex.DecodeString(sigStr[2:])
+	//if err != nil {
+	//	panic(fmt.Errorf("failed to decode signature string: %w", err))
+	//}
+	//// This same change is made in geth internals, for legacy reasons to be able to recover the address:
+	////	https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L452-L459
+	//outputSig[64] -= 27
+	//
+	//// keys are expected to be a []byte of hex string
+	//vkPubKeyBytes, err := hex.DecodeString(string(compressedHexVKBytes))
+	//if err != nil {
+	//	panic(fmt.Errorf("unexpected hex string"))
+	//}
 
-	// keys are expected to be a []byte of hex string
-	vkPubKeyBytes, err := hex.DecodeString(string(compressedHexVKBytes))
-	if err != nil {
-		panic(fmt.Errorf("unexpected hex string"))
-	}
-
-	return &accountAddr, vkPubKeyBytes, outputSig
-}
-
-// Generates a viewing key.
-func generateViewingKey(wallHTTPPort, wallWSPort int, accountAddress string, useWS bool) []byte {
-	generateViewingKeyBodyBytes, err := json.Marshal(map[string]interface{}{
-		common.JSONKeyAddress: accountAddress,
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	if useWS {
-		viewingKeyBytes, _ := makeRequestWS(fmt.Sprintf("ws://%s:%d%s", common.Localhost, wallWSPort, common.PathGenerateViewingKey), generateViewingKeyBodyBytes)
-		return viewingKeyBytes
-	}
-	return makeRequestHTTP(fmt.Sprintf("http://%s:%d%s", common.Localhost, wallHTTPPort, common.PathGenerateViewingKey), generateViewingKeyBodyBytes)
+	return &accountAddr, nil, nil
 }
 
 // Signs a viewing key like metamask
@@ -236,23 +221,6 @@ func signViewingKey(privateKey *ecdsa.PrivateKey, compressedHexVKBytes []byte) [
 	signatureWithLeadBytes := append([]byte("0"), signature...)
 
 	return signatureWithLeadBytes
-}
-
-// Submits a viewing key.
-func submitViewingKey(accountAddr string, wallHTTPPort, wallWSPort int, signature []byte, useWS bool) {
-	submitViewingKeyBodyBytes, err := json.Marshal(map[string]interface{}{
-		common.JSONKeySignature: hex.EncodeToString(signature),
-		common.JSONKeyAddress:   accountAddr,
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	if useWS {
-		makeRequestWS(fmt.Sprintf("ws://%s:%d%s", common.Localhost, wallWSPort, common.PathSubmitViewingKey), submitViewingKeyBodyBytes)
-	} else {
-		makeRequestHTTP(fmt.Sprintf("http://%s:%d%s", common.Localhost, wallHTTPPort, common.PathSubmitViewingKey), submitViewingKeyBodyBytes)
-	}
 }
 
 // Sends the body to the URL over HTTP, and returns the result.

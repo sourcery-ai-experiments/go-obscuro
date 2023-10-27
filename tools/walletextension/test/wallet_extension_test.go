@@ -3,6 +3,7 @@ package test
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/obscuronet/go-obscuro/tools/walletextension/lib"
 	"math/big"
 	"strings"
 	"testing"
@@ -80,6 +81,8 @@ func canInvokeNonSensitiveMethodsWithoutViewingKey(t *testing.T, testHelper *tes
 func canInvokeSensitiveMethodsWithViewingKey(t *testing.T, testHelper *testHelper) {
 	address, vkPubKeyBytes, signature := simulateViewingKeyRegister(t, testHelper.walletHTTPPort, testHelper.walletWSPort, false)
 	testHelper.hostAPI.setViewingKey(address, vkPubKeyBytes, signature)
+
+	ogLib := lib.NewObscuroGatewayLibrary()
 
 	for _, method := range rpc.SensitiveMethods {
 		// Subscriptions have to be tested separately, as they return results differently.

@@ -38,7 +38,7 @@ task("obscuro:wallet-extension:start:local")
                 console.log(data.toString());
             }
 
-            if (data.includes("Wallet extension started")) {
+            if (data.includes("Obscuro Gateway started")) {
                 clearTimeout(timeoutSchedule);
                 resolve(true)
             }
@@ -90,13 +90,13 @@ task("obscuro:wallet-extension:start:docker", "Starts up the wallet extension do
         stderr: true
     })
 
-    console.log(`\nWallet Extension{ ${container.id.slice(0, 5)} } %>\n`);
+    console.log(`\nObscuro Gateway{ ${container.id.slice(0, 5)} } %>\n`);
     const startupPromise = new Promise((resolveInner)=> {    
         stream.on('data', (msg: any)=> {
             const message = msg.toString();
 
             console.log(message);    
-            if(message.includes("Wallet extension started")) {
+            if(message.includes("Obscuro Gateway started")) {
                 console.log(`Wallet - success!`);
                 resolveInner(true);
             }

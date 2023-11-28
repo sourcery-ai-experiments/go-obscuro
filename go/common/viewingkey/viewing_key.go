@@ -33,7 +33,7 @@ const (
 	EIP712DomainName         = "name"
 	EIP712DomainVersion      = "version"
 	EIP712DomainChainID      = "chainId"
-	EIP712EncryptionToken    = "Encryption Token"
+	EIP712EncryptionToken    = "EncryptionToken"
 	EIP712DomainNameValue    = "Ten"
 	EIP712DomainVersionValue = "1.0"
 	UserIDHexLength          = 40

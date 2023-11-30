@@ -16,7 +16,7 @@ task("obscuro:deploy", "Prepares for deploying.")
     
     // Start a wallet extension as a child process
     // This process is auto signaled to terminate when this process dies
-    await hre.run("obscuro:wallet-extension:start:local", {
+    await hre.run("ten:gateway:start:local", {
         rpcUrl : rpcURL,
         withStdOut: true
     });    
@@ -26,7 +26,7 @@ task("obscuro:deploy", "Prepares for deploying.")
 
     // Automatically provision a viewing key for the deployer account
     const { deployer } = await hre.getNamedAccounts();
-    await hre.run('obscuro:wallet-extension:add-key', {address: deployer});
+    await hre.run('ten:gateway:join-authenticate', {address: deployer});
 
     // Execute the deploy task provided by the HH deploy plugin.
     await hre.run('deploy');

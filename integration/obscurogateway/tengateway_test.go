@@ -5,11 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-kit/kit/transport/http/jsonrpc"
+	"github.com/ten-protocol/go-ten/go/rpc"
 
 	"github.com/ethereum/go-ethereum"
 	wecommon "github.com/ten-protocol/go-ten/tools/walletextension/common"
@@ -55,9 +59,9 @@ func TestTenGateway(t *testing.T) {
 	createTenNetwork(t, startPort)
 
 	tenGatewayConf := config.Config{
-		WalletExtensionHost:     "127.0.0.1",
-		WalletExtensionPortHTTP: startPort + integration.DefaultTenGatewayHTTPPortOffset,
-		WalletExtensionPortWS:   startPort + integration.DefaultTenGatewayWSPortOffset,
+		TenGatewayHost:          "127.0.0.1",
+		TenGatewayPortHTTP:      startPort + integration.DefaultTenGatewayHTTPPortOffset,
+		TenGatewayPortWS:        startPort + integration.DefaultTenGatewayWSPortOffset,
 		NodeRPCHTTPAddress:      fmt.Sprintf("127.0.0.1:%d", startPort+integration.DefaultHostRPCHTTPOffset),
 		NodeRPCWebsocketAddress: fmt.Sprintf("127.0.0.1:%d", startPort+integration.DefaultHostRPCWSOffset),
 		LogPath:                 "sys_out",
@@ -66,7 +70,7 @@ func TestTenGateway(t *testing.T) {
 		TenChainID:              443,
 	}
 
-	tenGwContainer := container.NewWalletExtensionContainerFromConfig(tenGatewayConf, testlog.Logger())
+	tenGwContainer := container.NewTenGatewayContainerFromConfig(tenGatewayConf, testlog.Logger())
 	go func() {
 		err := tenGwContainer.Start()
 		if err != nil {
@@ -78,8 +82,8 @@ func TestTenGateway(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// make sure the server is ready to receive requests
-	httpURL := fmt.Sprintf("http://%s:%d", tenGatewayConf.WalletExtensionHost, tenGatewayConf.WalletExtensionPortHTTP)
-	wsURL := fmt.Sprintf("ws://%s:%d", tenGatewayConf.WalletExtensionHost, tenGatewayConf.WalletExtensionPortWS)
+	httpURL := fmt.Sprintf("http://%s:%d", tenGatewayConf.TenGatewayHost, tenGatewayConf.TenGatewayPortHTTP)
+	wsURL := fmt.Sprintf("ws://%s:%d", tenGatewayConf.TenGatewayHost, tenGatewayConf.TenGatewayPortWS)
 
 	// make sure the server is ready to receive requests
 	err := waitServerIsReady(httpURL)
@@ -91,11 +95,14 @@ func TestTenGateway(t *testing.T) {
 	// run the tests against the exis
 	for name, test := range map[string]func(*testing.T, string, string, wallet.Wallet){
 		//"testAreTxsMinted":            testAreTxsMinted, this breaks the other tests bc, enable once concurency issues are fixed
-		"testErrorHandling":                    testErrorHandling,
-		"testMultipleAccountsSubscription":     testMultipleAccountsSubscription,
-		"testErrorsRevertedArePassed":          testErrorsRevertedArePassed,
-		"testUnsubscribe":                      testUnsubscribe,
-		"testClosingConnectionWhileSubscribed": testClosingConnectionWhileSubscribed,
+		"testErrorHandling":                                     testErrorHandling,
+		"testMultipleAccountsSubscription":                      testMultipleAccountsSubscription,
+		"testErrorsRevertedArePassed":                           testErrorsRevertedArePassed,
+		"testUnsubscribe":                                       testUnsubscribe,
+		"testClosingConnectionWhileSubscribed":                  testClosingConnectionWhileSubscribed,
+		"testInvokingSensitiveMethodsWithAndWithoutViewingKeys": testInvokingSensitiveMethodsWithAndWithoutViewingKeys,
+		"testInvokeNonSensitiveMethod":                          testInvokeNonSensitiveMethod,
+		"testGetStorageAtForReturningUserID":                    testGetStorageAtForReturningUserID,
 	} {
 		t.Run(name, func(t *testing.T) {
 			test(t, httpURL, wsURL, w)
@@ -107,6 +114,127 @@ func TestTenGateway(t *testing.T) {
 	time.Sleep(20 * time.Second)
 	err = tenGwContainer.Stop()
 	assert.NoError(t, err)
+}
+
+func testInvokingSensitiveMethodsWithAndWithoutViewingKeys(t *testing.T, httpURL, wsURL string, w wallet.Wallet) {
+	user, err := NewUser([]wallet.Wallet{w}, httpURL, wsURL)
+	require.NoError(t, err)
+	unregisteredUser, err := NewUser([]wallet.Wallet{w, datagenerator.RandomWallet(integration.TenChainID)}, httpURL, wsURL)
+	require.NoError(t, err)
+	err = user.RegisterAccounts()
+	require.NoError(t, err)
+
+	dummyParams := "dummyParams"
+	for _, method := range rpc.SensitiveMethods {
+		// Subscriptions are tested separately
+		if method == rpc.Subscribe {
+			continue
+		}
+
+		// handle eth_sendRawTransaction function differently, because it requires different params
+		if method == "eth_sendRawTransaction" {
+			respBody := makeHTTPEthJSONReq(httpURL, method, user.tgClient.UserID(), []interface{}{"test"})
+			if strings.Contains(string(respBody), fmt.Sprintf("method %s cannot be called with an unauthorised client - no signed viewing keys found", method)) {
+				t.Errorf("sensitive method called without authenticating viewingkeys and did fail because of it:  %s", method)
+			}
+
+			respBody = makeHTTPEthJSONReq(httpURL, method, unregisteredUser.tgClient.UserID(), []interface{}{"test"})
+			if !strings.Contains(string(respBody), fmt.Sprintf("method %s cannot be called with an unauthorised client - no signed viewing keys found", method)) {
+				t.Errorf("sensitive method called without authenticating viewingkeys and did fail because of it:  %s", method)
+			}
+			continue
+		}
+
+		// Call sensitive method with a client that is registered.
+		// We expect the response not to contain: "cannot be called with an unauthorised client"
+		respBody := makeHTTPEthJSONReq(httpURL, method, user.tgClient.UserID(), []interface{}{map[string]interface{}{"params": dummyParams}})
+		if strings.Contains(string(respBody), fmt.Sprintf("method %s cannot be called with an unauthorised client - no signed viewing keys found", method)) {
+			t.Errorf("sensitive method called without authenticating viewingkeys and did fail because of it:  %s", method)
+		}
+
+		// Call sensitive method with a client that is not registered. We expect an error message: "cannot be called with an unauthorised client"
+		respBody = makeHTTPEthJSONReq(httpURL, method, unregisteredUser.tgClient.UserID(), []interface{}{map[string]interface{}{"params": dummyParams}})
+		if !strings.Contains(string(respBody), fmt.Sprintf("method %s cannot be called with an unauthorised client - no signed viewing keys found", method)) {
+			t.Errorf("sensitive method called without authenticating viewingkeys and did fail because of it:  %s", method)
+		}
+	}
+}
+
+func testInvokeNonSensitiveMethod(t *testing.T, httpURL, wsURL string, w wallet.Wallet) {
+	user, err := NewUser([]wallet.Wallet{w}, httpURL, wsURL)
+	require.NoError(t, err)
+
+	// call one of the non-sensitive methods with unauthenticated user
+	// and make sure gateway is not complaining about not having viewing keys
+	respBody := makeHTTPEthJSONReq(httpURL, rpc.ChainID, user.tgClient.UserID(), nil)
+	if strings.Contains(string(respBody), fmt.Sprintf("method %s cannot be called with an unauthorised client - no signed viewing keys found", rpc.ChainID)) {
+		t.Errorf("sensitive method called without authenticating viewingkeys and did fail because of it:  %s", rpc.ChainID)
+	}
+}
+
+func testGetStorageAtForReturningUserID(t *testing.T, httpURL, wsURL string, w wallet.Wallet) {
+	user, err := NewUser([]wallet.Wallet{w}, httpURL, wsURL)
+	require.NoError(t, err)
+
+	type JSONResponse struct {
+		Result string `json:"result"`
+	}
+	var response JSONResponse
+
+	// make a request to GetStorageAt with correct parameters to get userID that exists in the database
+	respBody := makeHTTPEthJSONReq(httpURL, rpc.GetStorageAt, user.tgClient.UserID(), []interface{}{"getUserID", "0", nil})
+	if err = json.Unmarshal(respBody, &response); err != nil {
+		t.Error("Unable to unmarshal response")
+	}
+	if response.Result != user.tgClient.UserID() {
+		t.Errorf("Wrong UserID returned. Expected: %s, received: %s", user.tgClient.UserID(), response.Result)
+	}
+
+	// make a request to GetStorageAt with correct parameters to get userID, but with wrong userID
+	respBody2 := makeHTTPEthJSONReq(httpURL, rpc.GetStorageAt, "invalid_user_id", []interface{}{"getUserID", "0", nil})
+	if !strings.Contains(string(respBody2), "encrypyion token ('token') not found in query parameters or user not found in the database") {
+		t.Error("eth_getStorageAt did not respond with error: encrypyion token ('token') not found in query parameters or user not found in the database")
+	}
+
+	// make a request to GetStorageAt with wrong parameters to get userID, but correct userID
+	respBody3 := makeHTTPEthJSONReq(httpURL, rpc.GetStorageAt, user.tgClient.UserID(), []interface{}{"abc", "0", nil})
+	if !strings.Contains(string(respBody3), "method eth_getStorageAt cannot be called with an unauthorised client - no signed viewing keys found") {
+		t.Error("eth_getStorageAt did not respond with error: no signed viewing keys found")
+	}
+}
+
+func makeRequestHTTP(url string, body []byte) []byte {
+	generateViewingKeyBody := bytes.NewBuffer(body)
+	resp, err := http.Post(url, "application/json", generateViewingKeyBody) //nolint:noctx,gosec
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
+	if err != nil {
+		panic(err)
+	}
+	viewingKey, err := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	return viewingKey
+}
+
+func makeHTTPEthJSONReq(url string, method string, userID string, params interface{}) []byte {
+	reqBody := prepareRequestBody(method, params)
+	return makeRequestHTTP(fmt.Sprintf("%s/v1/?token=%s", url, userID), reqBody)
+}
+
+func prepareRequestBody(method string, params interface{}) []byte {
+	reqBodyBytes, err := json.Marshal(map[string]interface{}{
+		wecommon.JSONKeyRPCVersion: jsonrpc.Version,
+		wecommon.JSONKeyMethod:     method,
+		wecommon.JSONKeyParams:     params,
+		wecommon.JSONKeyID:         "1",
+	})
+	if err != nil {
+		panic(fmt.Errorf("failed to prepare request body. Cause: %w", err))
+	}
+	return reqBodyBytes
 }
 
 func testMultipleAccountsSubscription(t *testing.T, httpURL, wsURL string, w wallet.Wallet) {
@@ -246,17 +374,17 @@ func testMultipleAccountsSubscription(t *testing.T, httpURL, wsURL string, w wal
 
 func testAreTxsMinted(t *testing.T, httpURL, wsURL string, w wallet.Wallet) { //nolint: unused
 	// set up the tgClient
-	ogClient := lib.NewTenGatewayLibrary(httpURL, wsURL)
+	tgClient := lib.NewTenGatewayLibrary(httpURL, wsURL)
 
-	// join + register against the og
-	err := ogClient.Join()
+	// join + register against the tg
+	err := tgClient.Join()
 	require.NoError(t, err)
 
-	err = ogClient.RegisterAccount(w.PrivateKey(), w.Address())
+	err = tgClient.RegisterAccount(w.PrivateKey(), w.Address())
 	require.NoError(t, err)
 
-	// use a standard eth client via the og
-	ethStdClient, err := ethclient.Dial(ogClient.HTTP())
+	// use a standard eth client via the tg
+	ethStdClient, err := ethclient.Dial(tgClient.HTTP())
 	require.NoError(t, err)
 
 	// check the balance
@@ -273,14 +401,14 @@ func testAreTxsMinted(t *testing.T, httpURL, wsURL string, w wallet.Wallet) { //
 
 func testErrorHandling(t *testing.T, httpURL, wsURL string, w wallet.Wallet) {
 	// set up the tgClient
-	ogClient := lib.NewTenGatewayLibrary(httpURL, wsURL)
+	tgClient := lib.NewTenGatewayLibrary(httpURL, wsURL)
 
-	// join + register against the og
-	err := ogClient.Join()
+	// join + register against the tg
+	err := tgClient.Join()
 	require.NoError(t, err)
 
 	// register an account
-	err = ogClient.RegisterAccount(w.PrivateKey(), w.Address())
+	err = tgClient.RegisterAccount(w.PrivateKey(), w.Address())
 	require.NoError(t, err)
 
 	// make requests to geth for comparison
@@ -294,7 +422,7 @@ func testErrorHandling(t *testing.T, httpURL, wsURL string, w wallet.Wallet) {
 		`{"jsonrpc":"2.0","method":"eth_sendTransaction","params":[["0xA58C60cc047592DE97BF1E8d2f225Fc5D959De77", "0x1234"]],"id":1}`,
 	} {
 		// ensure the geth request is issued correctly (should return 200 ok with jsonRPCError)
-		_, response, err := httputil.PostDataJSON(ogClient.HTTP(), []byte(req))
+		_, response, err := httputil.PostDataJSON(tgClient.HTTP(), []byte(req))
 		require.NoError(t, err)
 
 		// unmarshall the response to JSONRPCMessage
@@ -315,17 +443,17 @@ func testErrorHandling(t *testing.T, httpURL, wsURL string, w wallet.Wallet) {
 
 func testErrorsRevertedArePassed(t *testing.T, httpURL, wsURL string, w wallet.Wallet) {
 	// set up the tgClient
-	ogClient := lib.NewTenGatewayLibrary(httpURL, wsURL)
+	tgClient := lib.NewTenGatewayLibrary(httpURL, wsURL)
 
-	// join + register against the og
-	err := ogClient.Join()
+	// join + register against the tg
+	err := tgClient.Join()
 	require.NoError(t, err)
 
-	err = ogClient.RegisterAccount(w.PrivateKey(), w.Address())
+	err = tgClient.RegisterAccount(w.PrivateKey(), w.Address())
 	require.NoError(t, err)
 
-	// use a standard eth client via the og
-	ethStdClient, err := ethclient.Dial(ogClient.HTTP())
+	// use a standard eth client via the tg
+	ethStdClient, err := ethclient.Dial(tgClient.HTTP())
 	require.NoError(t, err)
 
 	// check the balance

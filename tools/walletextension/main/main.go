@@ -21,7 +21,7 @@ const (
 func main() {
 	config := parseCLIArgs()
 	jsonConfig, _ := json.MarshalIndent(config, "", "  ")
-	fmt.Printf("Welcome to the Obscuro wallet extension. \n\n")
+	fmt.Printf("Welcome to the Ten Gateway. \n\n")
 	fmt.Printf("Starting with following config: \n%s\n", string(jsonConfig))
 
 	// We wait thirty seconds for a connection to the node. If we cannot establish one, we exit the program.
@@ -57,8 +57,7 @@ func main() {
 		logLvl = gethlog.LvlDebug
 	}
 	logger := log.New(log.WalletExtCmp, int(logLvl), config.LogPath)
-
-	walletExtContainer := container.NewWalletExtensionContainerFromConfig(config, logger)
+	walletExtContainer := container.NewTenGatewayContainerFromConfig(config, logger)
 
 	// Start the wallet extension.
 	err := walletExtContainer.Start()
@@ -66,9 +65,8 @@ func main() {
 		fmt.Printf("error in WE - %s", err)
 	}
 
-	walletExtensionAddr := fmt.Sprintf("%s:%d", common.Localhost, config.WalletExtensionPortHTTP)
-	fmt.Printf("💡 Wallet extension started \n") // Some tests rely on seeing this message. Removed in next PR.
-	fmt.Printf("💡 Obscuro Gateway started - visit http://%s to use it.\n", walletExtensionAddr)
+	tenGatewayAddr := fmt.Sprintf("%s:%d", common.Localhost, config.TenGatewayPortHTTP)
+	fmt.Printf("💡 Ten Gateway started - visit http://%s to use it.\n", tenGatewayAddr)
 
 	select {}
 }

@@ -1,16 +1,11 @@
 package container
 
 import (
-	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
-
-	"github.com/ethereum/go-ethereum/common"
-
-	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/ten-protocol/go-ten/go/common/log"
 	"github.com/ten-protocol/go-ten/go/common/stopcontrol"
@@ -36,7 +31,7 @@ type WalletExtensionContainer struct {
 	wsServer           *api.Server
 }
 
-func NewWalletExtensionContainerFromConfig(config config.Config, logger gethlog.Logger) *WalletExtensionContainer {
+func NewTenGatewayContainerFromConfig(config config.Config, logger gethlog.Logger) *WalletExtensionContainer {
 	// create the account manager with a single unauthenticated connection
 	hostRPCBindAddr := wecommon.WSProtocol + config.NodeRPCWebsocketAddress
 	unAuthedClient, err := rpc.NewNetworkClient(hostRPCBindAddr)
@@ -53,16 +48,6 @@ func NewWalletExtensionContainerFromConfig(config config.Config, logger gethlog.
 	}
 	userAccountManager := useraccountmanager.NewUserAccountManager(unAuthedClient, logger, databaseStorage, hostRPCBindAddr)
 
-	// add default user (when no UserID is provided in the query parameter - for WE endpoints)
-	defaultUserAccountManager := userAccountManager.AddAndReturnAccountManager(hex.EncodeToString([]byte(wecommon.DefaultUser)))
-
-	// add default user to the database (temporary fix before removing wallet extension endpoints)
-	accountPrivateKey, err := crypto.GenerateKey()
-	if err != nil {
-		logger.Error("Unable to generate key pair for default user", log.ErrKey, err)
-		os.Exit(1)
-	}
-
 	// get all users and their private keys from the database
 	allUsers, err := databaseStorage.GetAllUsers()
 	if err != nil {
@@ -74,32 +59,6 @@ func NewWalletExtensionContainerFromConfig(config config.Config, logger gethlog.
 	for _, user := range allUsers {
 		userAccountManager.AddAndReturnAccountManager(hex.EncodeToString(user.UserID))
 		logger.Info(fmt.Sprintf("account manager added for user: %s", hex.EncodeToString(user.UserID)))
-
-		// to ensure backwards compatibility we want to load clients for the default user
-		// TODO @ziga - this code needs to be removed when removing old wallet extension endpoints
-		if bytes.Equal(user.UserID, []byte(wecommon.DefaultUser)) {
-			accounts, err := databaseStorage.GetAccounts(user.UserID)
-			if err != nil {
-				logger.Error(fmt.Errorf("error getting accounts for user: %s, %w", hex.EncodeToString(user.UserID), err).Error())
-				os.Exit(1)
-			}
-			for _, account := range accounts {
-				encClient, err := wecommon.CreateEncClient(hostRPCBindAddr, account.AccountAddress, user.PrivateKey, account.Signature, logger)
-				if err != nil {
-					logger.Error(fmt.Errorf("error creating new client, %w", err).Error())
-					os.Exit(1)
-				}
-
-				// add a client to default user
-				defaultUserAccountManager.AddClient(common.BytesToAddress(account.AccountAddress), encClient)
-			}
-		}
-	}
-	// TODO @ziga - remove this when removing wallet extension endpoints
-	err = databaseStorage.AddUser([]byte(wecommon.DefaultUser), crypto.FromECDSA(accountPrivateKey))
-	if err != nil {
-		logger.Error("Unable to save default user to the database", log.ErrKey, err)
-		os.Exit(1)
 	}
 
 	// captures version in the env vars
@@ -111,10 +70,10 @@ func NewWalletExtensionContainerFromConfig(config config.Config, logger gethlog.
 	stopControl := stopcontrol.New()
 	walletExt := walletextension.New(hostRPCBindAddr, &userAccountManager, databaseStorage, stopControl, version, logger, &config)
 	httpRoutes := api.NewHTTPRoutes(walletExt)
-	httpServer := api.NewHTTPServer(fmt.Sprintf("%s:%d", config.WalletExtensionHost, config.WalletExtensionPortHTTP), httpRoutes)
+	httpServer := api.NewHTTPServer(fmt.Sprintf("%s:%d", config.TenGatewayHost, config.TenGatewayPortHTTP), httpRoutes)
 
 	wsRoutes := api.NewWSRoutes(walletExt)
-	wsServer := api.NewWSServer(fmt.Sprintf("%s:%d", config.WalletExtensionHost, config.WalletExtensionPortWS), wsRoutes)
+	wsServer := api.NewWSServer(fmt.Sprintf("%s:%d", config.TenGatewayHost, config.TenGatewayPortWS), wsRoutes)
 	return NewWalletExtensionContainer(
 		hostRPCBindAddr,
 		walletExt,

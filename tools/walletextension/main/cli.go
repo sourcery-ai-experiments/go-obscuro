@@ -73,9 +73,9 @@ func parseCLIArgs() config.Config {
 	flag.Parse()
 
 	return config.Config{
-		WalletExtensionHost:     *walletExtensionHost,
-		WalletExtensionPortHTTP: *walletExtensionPort,
-		WalletExtensionPortWS:   *walletExtensionPortWS,
+		TenGatewayHost:          *walletExtensionHost,
+		TenGatewayPortHTTP:      *walletExtensionPort,
+		TenGatewayPortWS:        *walletExtensionPortWS,
 		NodeRPCHTTPAddress:      fmt.Sprintf("%s:%d", *nodeHost, *nodeHTTPPort),
 		NodeRPCWebsocketAddress: fmt.Sprintf("%s:%d", *nodeHost, *nodeWebsocketPort),
 		LogPath:                 *logPath,

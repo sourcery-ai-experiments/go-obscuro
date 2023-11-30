@@ -2,9 +2,9 @@ package config
 
 // Config contains the configuration required by the WalletExtension.
 type Config struct {
-	WalletExtensionHost     string
-	WalletExtensionPortHTTP int
-	WalletExtensionPortWS   int
+	TenGatewayHost          string
+	TenGatewayPortHTTP      int
+	TenGatewayPortWS        int
 	NodeRPCHTTPAddress      string
 	NodeRPCWebsocketAddress string
 	LogPath                 string

@@ -26,9 +26,6 @@ const (
 const (
 	PathRoot                            = "/"
 	PathReady                           = "/ready/"
-	PathViewingKeys                     = "/viewingkeys/"
-	PathGenerateViewingKey              = "/generateviewingkey/"
-	PathSubmitViewingKey                = "/submitviewingkey/"
 	PathJoin                            = "/join/"
 	PathAuthenticate                    = "/authenticate/"
 	PathQuery                           = "/query/"
@@ -36,7 +33,6 @@ const (
 	PathObscuroGateway                  = "/"
 	PathHealth                          = "/health/"
 	WSProtocol                          = "ws://"
-	DefaultUser                         = "defaultUser"
 	UserQueryParameter                  = "u"
 	EncryptedTokenQueryParameter        = "token"
 	AddressQueryParameter               = "a"

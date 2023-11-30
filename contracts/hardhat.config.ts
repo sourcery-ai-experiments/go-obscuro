@@ -9,7 +9,7 @@ import 'hardhat-deploy';
 // Hardhat ignore warnings plugin - https://www.npmjs.com/package/hardhat-ignore-warnings
 import 'hardhat-ignore-warnings';
 
-import './tasks/wallet-extension';
+import './tasks/ten-gateway';
 import * as abigen from './tasks/abigen';
 import './tasks/obscuro-deploy';
 

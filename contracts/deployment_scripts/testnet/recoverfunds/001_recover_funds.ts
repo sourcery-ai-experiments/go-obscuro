@@ -10,7 +10,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     const addressToPay = process.env.ACC_TO_PAY!!
 
     const mgmtContract = (await hre.ethers.getContractFactory('ManagementContract')).attach(mgmtContractAddress)
-    const tx = await mgmtContract.RetrieveAllBridgeFunds();
+    const tx = await mgmtContract.RetrieveAllBridgeFunds({gasLimit:200000});
     const receipt = await tx.wait();
 
     // Check the receipt for success, logs, etc.

@@ -3,6 +3,7 @@ import {DeployFunction} from 'hardhat-deploy/types';
 
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
+    return;
     const {deployer} = await hre.getNamedAccounts();
     const ethers = hre.ethers;
     const proxyAdmin =await ethers.getContractAt('IDefaultProxyAdmin', '0xFFa0feA0cb522f3d0CE644B9a111215ACbEb061B', await ethers.getSigner(deployer))

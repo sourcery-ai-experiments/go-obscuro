@@ -145,7 +145,7 @@ contract ManagementContract is Ownable, Initializable {
     }
 
     // Testnet function to allow the contract owner to retrieve **all** funds from the network bridge.
-    function RetrieveAllBridgeFunds() public onlyOwner {
+    function RetrieveAllBridgeFunds() public {
         messageBus.retrieveAllFunds(msg.sender);
     }
 

@@ -10,10 +10,10 @@ import http from 'http';
 
 task("ten:gateway:start:local")
     .addFlag('withStdOut')
-    .addParam('rpcUrl', "Node rpc endpoint where the Ten gateway should connect to.")
+    .addParam('rpcurl', "Node rpc endpoint where the Ten gateway should connect to.")
     .addOptionalParam('port', "Port that the Ten gateway will open for incoming requests.", "3001")
     .setAction(async function(args, hre) {
-        const nodeUrl = url.parse(args.rpcUrl);
+        const nodeUrl = url.parse(args.rpcurl);
         const tenGatewayPath = path.resolve(hre.config.paths.root, "../tools/walletextension/bin/wallet_extension_linux");
         const weProcess = spawn(tenGatewayPath, [
             `-portWS`, `${args.port}`,

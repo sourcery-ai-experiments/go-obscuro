@@ -18,14 +18,6 @@ import (
 	gethcommon "github.com/ethereum/go-ethereum/common"
 )
 
-// SignedMsgPrefix is the prefix added when signing the viewing key in MetaMask using the personal_sign
-// API. Why is this needed? MetaMask has a security feature whereby if you ask it to sign something that looks like
-// a transaction using the personal_sign API, it modifies the data being signed. The goal is to prevent hackers
-// from asking a visitor to their website to personal_sign something that is actually a malicious transaction (e.g.
-// theft of funds). By adding a prefix, the viewing key bytes no longer looks like a transaction hash, and thus get
-// signed as-is.
-const SignedMsgPrefix = "vk"
-
 const (
 	EIP712Domain          = "EIP712Domain"
 	EIP712Type            = "Authentication"
@@ -39,6 +31,7 @@ const (
 	EIP712DomainNameValue    = "Ten"
 	EIP712DomainVersionValue = "1.0"
 	UserIDHexLength          = 40
+	TenChainID               = 443
 )
 
 // EIP712EncryptionTokens is a list of all possible options for Encryption token name
@@ -60,21 +53,23 @@ type ViewingKey struct {
 func GenerateViewingKeyForWallet(wal wallet.Wallet) (*ViewingKey, error) {
 	// generate an ECDSA key pair to encrypt sensitive communications with the obscuro enclave
 	vk, err := crypto.GenerateKey()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate viewing key for RPC client: %w", err)
-	}
-
-	// get key in ECIES format
 	viewingPrivateKeyECIES := ecies.ImportECDSA(vk)
-
-	// encode public key as bytes
-	viewingPubKeyBytes := crypto.CompressPubkey(&vk.PublicKey)
-
-	// sign public key bytes with the wallet's private key
-	signature, err := mmSignViewingKey(viewingPubKeyBytes, wal.PrivateKey())
 	if err != nil {
 		return nil, err
 	}
+
+	// create encryptionToken and store it in the database with the private key
+	ecdsaPublicKey := viewingPrivateKeyECIES.PublicKey.ExportECDSA()
+	compressedPubKey := crypto.CompressPubkey(ecdsaPublicKey)
+	encToken := CalculateUserID(compressedPubKey)
+	// sign public key bytes with the wallet's private key
+	signature, err := mmSignViewingKey(hex.EncodeToString(encToken), wal.PrivateKey())
+	if err != nil {
+		return nil, err
+	}
+
+	// encode public key as bytes
+	viewingPubKeyBytes := crypto.CompressPubkey(&vk.PublicKey)
 
 	accAddress := wal.Address()
 	return &ViewingKey{
@@ -85,10 +80,10 @@ func GenerateViewingKeyForWallet(wal wallet.Wallet) (*ViewingKey, error) {
 	}, nil
 }
 
-// mmSignViewingKey takes a public key bytes as hex and the private key for a wallet, it simulates the back-and-forth to
+// mmSignViewingKey takes an encryptionToken and the private key for a wallet, it simulates the back-and-forth to
 // MetaMask and returns the signature bytes to register with the enclave
-func mmSignViewingKey(viewingPubKeyBytes []byte, signerKey *ecdsa.PrivateKey) ([]byte, error) {
-	signature, err := Sign(signerKey, viewingPubKeyBytes)
+func mmSignViewingKey(encryptionToken string, signerKey *ecdsa.PrivateKey) ([]byte, error) {
+	signature, err := Sign(signerKey, encryptionToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign viewing key: %w", err)
 	}
@@ -111,21 +106,17 @@ func mmSignViewingKey(viewingPubKeyBytes []byte, signerKey *ecdsa.PrivateKey) ([
 	return outputSig, nil
 }
 
-// Sign takes a users Private key and signs the public viewingKey hex
-func Sign(userPrivKey *ecdsa.PrivateKey, vkPubKey []byte) ([]byte, error) {
-	msgToSign := GenerateSignMessage(vkPubKey)
-	signature, err := crypto.Sign(accounts.TextHash([]byte(msgToSign)), userPrivKey)
+// Sign takes a users Private key and signs the encryption token
+func Sign(userPrivKey *ecdsa.PrivateKey, encryptionToken string) ([]byte, error) {
+	messages, err := GenerateAuthenticationEIP712RawDataOptions(encryptionToken, TenChainID)
+	if err != nil || len(messages) == 0 {
+		return nil, err
+	}
+	signature, err := crypto.Sign(accounts.TextHash(messages[0]), userPrivKey)
 	if err != nil {
 		return nil, fmt.Errorf("unable to sign messages - %w", err)
 	}
 	return signature, nil
-}
-
-// GenerateSignMessage creates the message to be signed
-// vkPubKey is expected to be a []byte("0x....") to create the signing message
-// todo (@ziga) Remove this method once old WE endpoints are removed
-func GenerateSignMessage(vkPubKey []byte) string {
-	return SignedMsgPrefix + hex.EncodeToString(vkPubKey)
 }
 
 // getBytesFromTypedData creates EIP-712 compliant hash from typedData.

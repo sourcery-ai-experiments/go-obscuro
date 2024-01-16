@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-kit/kit/transport/http/jsonrpc"
 	"github.com/gorilla/websocket"
@@ -218,14 +217,8 @@ func generateViewingKey(wallHTTPPort, wallWSPort int, accountAddress string, use
 
 // Signs a viewing key like metamask
 func signViewingKey(privateKey *ecdsa.PrivateKey, compressedHexVKBytes []byte) []byte {
-	// compressedHexVKBytes already has the key in the hex format
-	// it should be decoded back into raw bytes
-	viewingKey, err := hex.DecodeString(string(compressedHexVKBytes))
-	if err != nil {
-		panic(err)
-	}
-	msgToSign := viewingkey.GenerateSignMessage(viewingKey)
-	signature, err := crypto.Sign(accounts.TextHash([]byte(msgToSign)), privateKey)
+	encToken := hex.EncodeToString(crypto.Keccak256Hash(compressedHexVKBytes).Bytes()[:20])
+	signature, err := viewingkey.Sign(privateKey, encToken)
 	if err != nil {
 		panic(err)
 	}

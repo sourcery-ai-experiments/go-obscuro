@@ -3,7 +3,6 @@ package vkhandler
 import (
 	"testing"
 
-	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
 	"github.com/stretchr/testify/assert"
@@ -27,7 +26,6 @@ func TestVKHandler(t *testing.T) {
 	}
 	vkPubKeyBytes := crypto.CompressPubkey(ecies.ImportECDSAPublic(&vkPrivKey.PublicKey).ExportECDSA())
 	userID := viewingkey.CalculateUserIDHex(vkPubKeyBytes)
-	WEMessageFormatTestHash := accounts.TextHash([]byte(viewingkey.GenerateSignMessage(vkPubKeyBytes)))
 	EIP712MessageDataOptions, err := viewingkey.GenerateAuthenticationEIP712RawDataOptions(userID, chainID)
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -38,7 +36,6 @@ func TestVKHandler(t *testing.T) {
 	EIP712MessageFormatTestHash := crypto.Keccak256(EIP712MessageDataOptions[0])
 
 	tests := map[string][]byte{
-		"WEMessageFormatTest":     WEMessageFormatTestHash,
 		"EIP712MessageFormatTest": EIP712MessageFormatTestHash,
 	}
 
@@ -69,7 +66,6 @@ func TestSignAndCheckSignature(t *testing.T) {
 	}
 	vkPubKeyBytes := crypto.CompressPubkey(ecies.ImportECDSAPublic(&vkPrivKey.PublicKey).ExportECDSA())
 	userID := viewingkey.CalculateUserIDHex(vkPubKeyBytes)
-	WEMessageFormatTestHash := accounts.TextHash([]byte(viewingkey.GenerateSignMessage(vkPubKeyBytes)))
 	EIP712MessageData, err := viewingkey.GenerateAuthenticationEIP712RawDataOptions(userID, chainID)
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -77,7 +73,6 @@ func TestSignAndCheckSignature(t *testing.T) {
 	EIP712MessageFormatTestHash := crypto.Keccak256(EIP712MessageData[0])
 
 	tests := map[string][]byte{
-		"WEMessageFormatTest":     WEMessageFormatTestHash,
 		"EIP712MessageFormatTest": EIP712MessageFormatTestHash,
 	}
 

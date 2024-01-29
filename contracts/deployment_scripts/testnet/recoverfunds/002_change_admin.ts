@@ -6,8 +6,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     const {deployer} = await hre.getNamedAccounts();
     const ethers = hre.ethers;
 
-    const proxyAdminAddr = '0xc9c9a36b00dbe5e04e29220f011d4dbeb874f1e2';
-    const proxyAddr = '0x80e95A1f064c79aC3CDAECdE46f2877cb8fa6290';
+    const proxyAdminAddr = '0xEb3710985693057D9164723a9B6F320569A48b24';
+    const proxyAddr = '0x52a8D76CF9840cb7b9797d296b23042E031F35F4';
     const safeWalletAddr = '0xeA052c9635F1647A8a199c2315B9A66ce7d1e2a7';
 
     const proxyAdmin =await ethers.getContractAt('IDefaultProxyAdmin', proxyAdminAddr, await ethers.getSigner(deployer))

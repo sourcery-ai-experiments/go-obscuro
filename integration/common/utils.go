@@ -91,7 +91,7 @@ func AwaitReceiptEth(ctx context.Context, client *ethclient.Client, txHash gethc
 
 // PrefundWallets sends an amount `alloc` from the faucet wallet to each listed wallet.
 // The transactions are sent with sequential nonces, starting with `startingNonce`.
-func PrefundWallets(ctx context.Context, faucetWallet wallet.Wallet, faucetClient *obsclient.AuthObsClient, startingNonce uint64, wallets []wallet.Wallet, alloc *big.Int, timeout time.Duration) {
+func PrefundWallets(ctx context.Context, faucetWallet wallet.Wallet, faucetClient *obsclient.AuthObsClient, startingNonce uint64, wallets []wallet.Wallet, lowBalanceWallets []wallet.Wallet, alloc *big.Int, timeout time.Duration) {
 	// We send the transactions serially, so that we can precompute the nonces.
 	txHashes := make([]gethcommon.Hash, len(wallets))
 	for idx, w := range wallets {

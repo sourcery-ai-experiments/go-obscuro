@@ -209,7 +209,16 @@ func (s *Simulation) prefundObscuroAccounts() {
 	faucetWallet := s.Params.Wallets.L2FaucetWallet
 	faucetClient := s.RPCHandles.ObscuroWalletRndClient(faucetWallet)
 	nonce := NextNonce(s.ctx, s.RPCHandles, faucetWallet)
-	testcommon.PrefundWallets(s.ctx, faucetWallet, faucetClient, nonce, s.Params.Wallets.AllObsWallets(), big.NewInt(allocObsWallets), s.Params.ReceiptTimeout)
+	testcommon.PrefundWallets(
+		s.ctx,
+		faucetWallet,
+		faucetClient,
+		nonce,
+		s.Params.Wallets.AllObsWallets(),
+		s.Params.Wallets.ObsLowBalanceWallets,
+		big.NewInt(allocObsWallets),
+		s.Params.ReceiptTimeout,
+	)
 }
 
 // This deploys an ERC20 contract on Obscuro, which is used for token arithmetic.

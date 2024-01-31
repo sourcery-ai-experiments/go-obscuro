@@ -42,6 +42,8 @@ type SimWallets struct {
 	SimEthWallets []wallet.Wallet // the wallets of the simulated users on the Ethereum side
 	SimObsWallets []wallet.Wallet // and their equivalents on the obscuro side (with a different chainId)
 
+	ObsLowBalanceWallets []wallet.Wallet // wallets that are low on balance; useful for exclusion testing.
+
 	GasBridgeWallet wallet.Wallet
 
 	L2FaucetWallet wallet.Wallet // the wallet of the L2 faucet
@@ -62,9 +64,11 @@ func NewSimWallets(nrSimWallets int, nNodes int, ethereumChainID int64, obscuroC
 	// they will use the same key on both Ethereum and Obscuro, but different chainIDs
 	simEthWallets := make([]wallet.Wallet, nrSimWallets)
 	simObsWallets := make([]wallet.Wallet, nrSimWallets)
+	lowBalWallets := make([]wallet.Wallet, nrSimWallets)
 	for i := 0; i < nrSimWallets; i++ {
 		simEthWallets[i] = datagenerator.RandomWallet(ethereumChainID)
 		simObsWallets[i] = wallet.NewInMemoryWalletFromPK(big.NewInt(obscuroChainID), simEthWallets[i].PrivateKey(), testlog.Logger())
+		lowBalWallets[i] = datagenerator.RandomWallet(obscuroChainID)
 	}
 
 	// create the wallet to deploy the Management contract
@@ -113,6 +117,7 @@ func NewSimWallets(nrSimWallets int, nNodes int, ethereumChainID int64, obscuroC
 			POC:    datagenerator.RandomWallet(ethereumChainID),
 			Faucet: datagenerator.RandomWallet(ethereumChainID),
 		},
+		ObsLowBalanceWallets: lowBalWallets,
 	}
 }
 

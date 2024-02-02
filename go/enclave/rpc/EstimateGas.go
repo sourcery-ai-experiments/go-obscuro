@@ -17,91 +17,90 @@ import (
 	"github.com/ten-protocol/go-ten/go/common/gethencoding"
 	"github.com/ten-protocol/go-ten/go/common/measure"
 	"github.com/ten-protocol/go-ten/go/common/syserr"
+	"github.com/ten-protocol/go-ten/go/enclave"
 	"github.com/ten-protocol/go-ten/go/enclave/core"
-	"github.com/ten-protocol/go-ten/go/responses"
 )
 
-func (rpc *EncryptionManager) EstimateGas(encryptedParams common.EncryptedParamsEstimateGas) (*responses.Gas, common.SystemError) {
-	return withVKEncryption2[gethapi.TransactionArgs, gethrpc.BlockNumber, hexutil.Uint64](
-		rpc,
-		rpc.config.ObscuroChainID,
-		encryptedParams,
-		// extract sender and arguments
-		func(reqParams []any) (*UserRPCRequest2[gethapi.TransactionArgs, gethrpc.BlockNumber], error) {
-			// Parameters are [callMsg, block number (optional)]
-			if len(reqParams) < 1 {
-				return nil, fmt.Errorf("unexpected number of parameters")
-			}
+type EstimateGasParams struct {
+	TransactionArgs *gethapi.TransactionArgs
+	BlockNumber     *gethrpc.BlockNumber
+}
 
-			callMsg, err := gethencoding.ExtractEthCall(reqParams[0])
-			if err != nil {
-				return nil, fmt.Errorf("unable to decode EthCall Params - %w", err)
-			}
+func ExtractEstimateGasRequest(reqParams []any) (*enclave.UserRPCRequest[EstimateGasParams], error) {
+	// Parameters are [callMsg, block number (optional)]
+	if len(reqParams) < 1 {
+		return nil, fmt.Errorf("unexpected number of parameters")
+	}
 
-			// encryption will fail if From address is not provided
-			if callMsg.From == nil {
-				return nil, fmt.Errorf("no from address provided")
-			}
+	callMsg, err := gethencoding.ExtractEthCall(reqParams[0])
+	if err != nil {
+		return nil, fmt.Errorf("unable to decode EthCall Params - %w", err)
+	}
 
-			// extract optional block number - defaults to the latest block if not avail
-			blockNumber, err := gethencoding.ExtractOptionalBlockNumber(reqParams, 1)
-			if err != nil {
-				return nil, fmt.Errorf("unable to extract requested block number - %w", err)
-			}
+	// encryption will fail if From address is not provided
+	if callMsg.From == nil {
+		return nil, fmt.Errorf("no from address provided")
+	}
 
-			return &UserRPCRequest2[gethapi.TransactionArgs, gethrpc.BlockNumber]{callMsg.From, callMsg, blockNumber}, nil
-		},
-		// make call and return result
-		func(decodedParams *UserRPCRequest2[gethapi.TransactionArgs, gethrpc.BlockNumber]) (*UserResponse[hexutil.Uint64], error) {
-			txArgs := decodedParams.Param1
-			blockNumber := decodedParams.Param2
-			block, err := rpc.blockResolver.FetchHeadBlock()
-			if err != nil {
-				return nil, err
-			}
+	// extract optional block number - defaults to the latest block if not avail
+	blockNumber, err := gethencoding.ExtractOptionalBlockNumber(reqParams, 1)
+	if err != nil {
+		return nil, fmt.Errorf("unable to extract requested block number - %w", err)
+	}
 
-			// The message is run through the l1 publishing cost estimation for the current
-			// known head block.
-			l1Cost, err := rpc.gasOracle.EstimateL1CostForMsg(txArgs, block)
-			if err != nil {
-				return nil, err
-			}
+	return &enclave.UserRPCRequest[EstimateGasParams]{
+		Sender: callMsg.From,
+		Params: &EstimateGasParams{callMsg, blockNumber},
+	}, nil
+}
 
-			batch, err := rpc.storage.FetchHeadBatch()
-			if err != nil {
-				return nil, err
-			}
+func ExecuteEstimateGas(rpc *EncryptionManager, req *enclave.UserRPCRequest[EstimateGasParams]) (*enclave.UserResponse[hexutil.Uint64], error) {
+	block, err := rpc.blockResolver.FetchHeadBlock()
+	if err != nil {
+		return nil, err
+	}
 
-			// We divide the total estimated l1 cost by the l2 fee per gas in order to convert
-			// the expected cost into l2 gas based on current pricing.
-			// todo @siliev - add overhead when the base fee becomes dynamic.
-			publishingGas := big.NewInt(0).Div(l1Cost, batch.Header.BaseFee)
+	// The message is run through the l1 publishing cost estimation for the current
+	// known head block.
+	l1Cost, err := rpc.gasOracle.EstimateL1CostForMsg(req.Params.TransactionArgs, block)
+	if err != nil {
+		return nil, err
+	}
 
-			// The one additional gas captures the modulo leftover in some edge cases
-			// where BaseFee is bigger than the l1cost.
-			publishingGas = big.NewInt(0).Add(publishingGas, gethcommon.Big1)
+	batch, err := rpc.storage.FetchHeadBatch()
+	if err != nil {
+		return nil, err
+	}
 
-			executionGasEstimate, err := rpc.doEstimateGas(txArgs, blockNumber, rpc.config.GasLocalExecutionCapFlag)
-			if err != nil {
-				err = fmt.Errorf("unable to estimate transaction - %w", err)
+	// We divide the total estimated l1 cost by the l2 fee per gas in order to convert
+	// the expected cost into l2 gas based on current pricing.
+	// todo @siliev - add overhead when the base fee becomes dynamic.
+	publishingGas := big.NewInt(0).Div(l1Cost, batch.Header.BaseFee)
 
-				// make sure it's not some internal error
-				if errors.Is(err, syserr.InternalError{}) {
-					return nil, err
-				}
+	// The one additional gas captures the modulo leftover in some edge cases
+	// where BaseFee is bigger than the l1cost.
+	publishingGas = big.NewInt(0).Add(publishingGas, gethcommon.Big1)
 
-				// make sure to serialize any possible EVM error
-				evmErr, err := serializeEVMError(err)
-				if err == nil {
-					err = fmt.Errorf(string(evmErr))
-				}
-				return &UserResponse[hexutil.Uint64]{nil, err}, nil
-			}
+	executionGasEstimate, err := rpc.doEstimateGas(req.Params.TransactionArgs, req.Params.BlockNumber, rpc.config.GasLocalExecutionCapFlag)
+	if err != nil {
+		err = fmt.Errorf("unable to estimate transaction - %w", err)
 
-			totalGasEstimate := hexutil.Uint64(publishingGas.Uint64() + uint64(executionGasEstimate))
+		// make sure it's not some internal error
+		if errors.Is(err, syserr.InternalError{}) {
+			return nil, err
+		}
 
-			return &UserResponse[hexutil.Uint64]{&totalGasEstimate, nil}, nil
-		})
+		// make sure to serialize any possible EVM error
+		evmErr, err := serializeEVMError(err)
+		if err == nil {
+			err = fmt.Errorf(string(evmErr))
+		}
+		return &enclave.UserResponse[hexutil.Uint64]{nil, err}, nil
+	}
+
+	totalGasEstimate := hexutil.Uint64(publishingGas.Uint64() + uint64(executionGasEstimate))
+
+	return &enclave.UserResponse[hexutil.Uint64]{&totalGasEstimate, nil}, nil
 }
 
 // DoEstimateGas returns the estimation of minimum gas required to execute transaction

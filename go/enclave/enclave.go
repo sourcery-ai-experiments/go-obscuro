@@ -10,12 +10,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ten-protocol/go-ten/go/common/compression"
 	"github.com/ten-protocol/go-ten/go/common/measure"
 	"github.com/ten-protocol/go-ten/go/enclave/evm/ethchainadapter"
 	"github.com/ten-protocol/go-ten/go/enclave/gas"
 	"github.com/ten-protocol/go-ten/go/enclave/storage"
 	"github.com/ten-protocol/go-ten/go/enclave/txpool"
+	"github.com/ten-protocol/go-ten/go/enclave/vkhandler"
 
 	"github.com/ten-protocol/go-ten/go/enclave/components"
 	"github.com/ten-protocol/go-ten/go/enclave/nodetype"
@@ -65,7 +67,7 @@ type enclaveImpl struct {
 	l1BlockProcessor      components.L1BlockProcessor
 	rollupConsumer        components.RollupConsumer
 	l1Blockchain          *gethcore.BlockChain
-	rpcEncryptionManager  rpc.EncryptionManager
+	rpcEncryptionManager  *rpc.EncryptionManager
 	subscriptionManager   *events.SubscriptionManager
 	crossChainProcessors  *crosschain.Processors
 	sharedSecretProcessor *components.SharedSecretProcessor
@@ -716,7 +718,12 @@ func (e *enclaveImpl) EstimateGas(encryptedParams common.EncryptedParamsEstimate
 	}
 
 	defer core.LogMethodDuration(e.logger, measure.NewStopwatch(), "enclave.go:EstimateGas()")
-	return e.rpcEncryptionManager.EstimateGas(encryptedParams)
+	return withVKEncryption[rpc.EstimateGasParams, hexutil.Uint64](
+		e,
+		encryptedParams,
+		rpc.ExtractEstimateGasRequest,
+		rpc.ExecuteEstimateGas,
+	)
 }
 
 func (e *enclaveImpl) GetLogs(encryptedParams common.EncryptedParamsGetLogs) (*responses.Logs, common.SystemError) {
@@ -951,4 +958,80 @@ func replayBatchesToValidState(storage storage.Storage, registry components.Batc
 	}
 
 	return nil
+}
+
+func withVKEncryption[P any, R any](
+	encl *enclaveImpl, // this should really be an enclaveImpl private method but can't because of golang generics restriction
+	encReq []byte, // encrypted request that contains a signed viewing key
+	extractFromAndParams func([]any) (*UserRPCRequest[P], error), // extract the arguments and the logical sender from the plaintext request. Make sure to not return any information from the db in the error.
+	executeCall func(*rpc.EncryptionManager, *UserRPCRequest[P]) (*UserResponse[R], error), // execute the user call. Returns a user error or a system error
+) (*responses.EnclaveResponse, common.SystemError) {
+	// 1. Decrypt request
+	plaintextRequest, err := encl.rpcEncryptionManager.DecryptBytes(encReq)
+	if err != nil {
+		return responses.AsPlaintextError(fmt.Errorf("could not decrypt params - %w", err)), nil
+	}
+
+	// 2. Unmarshall into a generic []any array
+	var decodedRequest []any
+	if err := json.Unmarshal(plaintextRequest, &decodedRequest); err != nil {
+		return responses.AsPlaintextError(fmt.Errorf("could not unmarshal params - %w", err)), nil
+	}
+
+	// 3. Extract the VK from the first element
+	if len(decodedRequest) < 1 {
+		return responses.AsPlaintextError(fmt.Errorf("invalid request. viewing key is missing")), nil
+	}
+	vk, err := vkhandler.ExtractAndAuthenticateViewingKey(decodedRequest[0], encl.config.ObscuroChainID)
+	if err != nil {
+		return responses.AsPlaintextError(fmt.Errorf("invalid viewing key - %w", err)), nil
+	}
+
+	// 4. Call the function that knows how to extract request specific params from the request
+	decodedParams, err := extractFromAndParams(decodedRequest[1:])
+	if err != nil {
+		return responses.AsEncryptedError(fmt.Errorf("unable to decode params - %w", err), vk), nil
+	}
+
+	// when all return values are null, by convention this is "Not found", so we just return an empty value
+	if decodedParams == nil && err == nil {
+		// todo - this must be encrypted
+		// return responses.AsEncryptedEmptyResponse(vk), nil
+		return responses.AsEmptyResponse(), nil
+	}
+
+	// 5. Validate the logical sender
+	if decodedParams.Sender == nil {
+		return responses.AsEncryptedError(fmt.Errorf("invalid request - `from` field is mandatory"), vk), nil
+	}
+
+	// IMPORTANT!: this is where we authenticate the call.
+	if decodedParams.Sender.Hex() != vk.AccountAddress.Hex() {
+		return responses.AsEncryptedError(fmt.Errorf("failed authentication: account: %s does not match the requester: %s", vk.AccountAddress, decodedParams.Sender), vk), nil
+	}
+
+	// 6. Make the backend call and convert the response.
+	response, sysErr := executeCall(encl.rpcEncryptionManager, decodedParams)
+	if sysErr != nil {
+		return nil, responses.ToInternalError(sysErr)
+	}
+	if response.Err != nil {
+		return responses.AsEncryptedError(response.Err, vk), nil //nolint:nilerr
+	}
+	if response.Val == nil {
+		return responses.AsEncryptedEmptyResponse(vk), nil
+	}
+	return responses.AsEncryptedResponse[R](response.Val, vk), nil
+}
+
+// UserRPCRequest - decoded RPC argument accompanied by a logical sender
+type UserRPCRequest[P any] struct {
+	Sender *gethcommon.Address
+	Params *P
+}
+
+// UserResponse - the result of executing the Request against the services. Paired with a validation error that must be returned to the user.
+type UserResponse[R any] struct {
+	Val *R
+	Err error // the error will be encrypted
 }

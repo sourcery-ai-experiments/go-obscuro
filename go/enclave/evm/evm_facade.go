@@ -103,7 +103,12 @@ func executeTransaction(
 	before := header.MixDigest
 	// calculate a random value per transaction
 	header.MixDigest = crypto.CalculateTxRnd(before.Bytes(), tCount)
-	receipt, err := gethcore.ApplyTransaction(cc, chain, nil, gp, s, header, t, usedGas, vmCfg)
+	var receipt *types.Receipt
+	if header.Number.Uint64() > 50 && tCount%3 == 0 {
+		err = fmt.Errorf("oopsie")
+	} else {
+		receipt, err = gethcore.ApplyTransaction(cc, chain, nil, gp, s, header, t, usedGas, vmCfg)
+	}
 
 	// adjust the receipt to point to the right batch hash
 	if receipt != nil {

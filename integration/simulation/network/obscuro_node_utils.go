@@ -84,6 +84,11 @@ func createAuthClientsPerWallet(clients []rpc.Client, wallets *params.SimWallets
 	for _, w := range append(wallets.SimObsWallets, wallets.L2FaucetWallet) {
 		walletClients[w.Address().String()] = CreateAuthClients(clients, w)
 	}
+
+	for _, w := range wallets.ObsLowBalanceWallets {
+		walletClients[w.Address().String()] = CreateAuthClients(clients, w)
+	}
+
 	for _, t := range wallets.Tokens {
 		w := t.L2Owner
 		walletClients[w.Address().String()] = CreateAuthClients(clients, w)

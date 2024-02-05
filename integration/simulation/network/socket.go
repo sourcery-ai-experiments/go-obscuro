@@ -121,6 +121,7 @@ func (n *networkOfSocketNodes) Create(simParams *params.SimParams, _ *stats.Stat
 	if err != nil {
 		testlog.Logger().Crit("unable to create node connections", log.ErrKey, err)
 	}
+
 	walletClients := createAuthClientsPerWallet(n.l2Clients, simParams.Wallets)
 
 	return &RPCHandles{

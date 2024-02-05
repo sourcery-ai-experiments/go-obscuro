@@ -128,6 +128,11 @@ func (ti *TransactionInjector) Start() {
 	})
 
 	wg.Go(func() error {
+		ti.randomGasExceedFailures()
+		return nil
+	})
+
+	wg.Go(func() error {
 		ti.issueRandomWithdrawals()
 		return nil
 	})
@@ -283,6 +288,35 @@ func (ti *TransactionInjector) bridgeRandomGasTransfers() {
 	}
 }
 
+func (ti *TransactionInjector) randomGasExceedFailures() {
+	for txCounter := 0; ti.shouldKeepIssuing(txCounter); txCounter++ {
+		fromWallet := ti.rndLowBalWallet()
+		toWallet := ti.rndObsWallet()
+		obscuroClient := ti.rpcHandles.ObscuroWalletRndClient(fromWallet)
+
+		receiver := toWallet.Address()
+
+		txData := &types.LegacyTx{
+			Nonce:    fromWallet.GetNonceAndIncrement(),
+			Value:    big.NewInt(1_000_000_000_000 - 1_000_000),
+			Gas:      uint64(1_000_000),
+			GasPrice: gethcommon.Big1,
+			To:       &receiver,
+		}
+
+		signedTx, err := fromWallet.SignTransaction(txData)
+		if err != nil {
+			panic(err) // Failure to sign should never happen
+		}
+
+		if err = obscuroClient.SendTransaction(ti.ctx, signedTx); err != nil {
+			ti.logger.Warn("Failed to issue low balance transaction")
+		}
+
+		sleepRndBtw(ti.avgBlockDuration/3, ti.avgBlockDuration)
+	}
+}
+
 // issueRandomDeposits creates and issues a number of transactions proportional to the simulation time, such that they can be processed
 func (ti *TransactionInjector) issueRandomDeposits() {
 	// todo (@stefan) - this implementation transfers from the hoc and poc owner contracts
@@ -366,6 +400,10 @@ func (ti *TransactionInjector) createInvalidSignage(tx types.TxData, w wallet.Wa
 
 func (ti *TransactionInjector) rndObsWallet() wallet.Wallet {
 	return ti.wallets.SimObsWallets[rand.Intn(len(ti.wallets.SimObsWallets))] //nolint:gosec
+}
+
+func (ti *TransactionInjector) rndLowBalWallet() wallet.Wallet {
+	return ti.wallets.ObsLowBalanceWallets[rand.Intn(len(ti.wallets.ObsLowBalanceWallets))] //nolint:gosec
 }
 
 func (ti *TransactionInjector) newObscuroTransferTx(from wallet.Wallet, dest gethcommon.Address, amount uint64) types.TxData {

@@ -116,6 +116,28 @@ func PrefundWallets(ctx context.Context, faucetWallet wallet.Wallet, faucetClien
 		txHashes[idx] = signedTx.Hash()
 	}
 
+	for idx, w := range lowBalanceWallets {
+		destAddr := w.Address()
+		tx := &types.LegacyTx{
+			Nonce:    startingNonce + uint64(idx) + uint64(len(wallets)),
+			Value:    big.NewInt(1_000_000_000_000),
+			Gas:      uint64(1_000_000),
+			GasPrice: gethcommon.Big1,
+			To:       &destAddr,
+		}
+		signedTx, err := faucetWallet.SignTransaction(tx)
+		if err != nil {
+			panic(err)
+		}
+
+		err = faucetClient.SendTransaction(ctx, signedTx)
+		if err != nil {
+			panic(fmt.Sprintf("could not transfer from faucet. Cause: %s", err))
+		}
+
+		txHashes = append(txHashes, signedTx.Hash())
+	}
+
 	// Then we await the receipts in parallel.
 	wg := sync.WaitGroup{}
 	for _, txHash := range txHashes {

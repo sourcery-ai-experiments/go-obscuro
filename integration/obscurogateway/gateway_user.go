@@ -51,7 +51,7 @@ func NewUser(wallets []wallet.Wallet, serverAddressHTTP string, serverAddressWS 
 
 func (u GatewayUser) RegisterAccounts() error {
 	for _, w := range u.Wallets {
-		err := u.tgClient.RegisterAccount(w.PrivateKey(), w.Address())
+		err := u.tgClient.RegisterAccountNonEP712(w.PrivateKey(), w.Address())
 		if err != nil {
 			return err
 		}

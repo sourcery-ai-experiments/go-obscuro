@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts"
 	"io"
 	"net/http"
 	"strings"
@@ -55,6 +56,56 @@ func (o *TGLib) RegisterAccount(pk *ecdsa.PrivateKey, addr gethcommon.Address) e
 	}
 
 	messageHash := crypto.Keccak256(rawMessageOptions[0])
+	sig, err := crypto.Sign(messageHash, pk)
+	if err != nil {
+		return fmt.Errorf("failed to sign message: %w", err)
+	}
+	sig[64] += 27
+	signature := "0x" + hex.EncodeToString(sig)
+	payload := fmt.Sprintf("{\"signature\": \"%s\", \"address\": \"%s\"}", signature, addr.Hex())
+
+	// issue the registration message
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		o.httpURL+"/v1/authenticate/?token="+string(o.userID),
+		strings.NewReader(payload),
+	)
+	if err != nil {
+		return fmt.Errorf("unable to create request - %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
+
+	client := &http.Client{}
+	response, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("unable to issue request - %w", err)
+	}
+
+	defer response.Body.Close()
+	r, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("unable to read response - %w", err)
+	}
+	if string(r) != "success" {
+		return fmt.Errorf("expected success, got %s", string(r))
+	}
+	return nil
+}
+
+func (o *TGLib) RegisterAccountNonEP712(pk *ecdsa.PrivateKey, addr gethcommon.Address) error {
+	// create the registration message
+	rawMessageOptions, err := viewingkey.GenerateAuthenticationEIP712RawDataOptions(string(o.userID), integration.TenChainID)
+	if err != nil {
+		return err
+	}
+	if len(rawMessageOptions) == 0 {
+		return fmt.Errorf("GenerateAuthenticationEIP712RawDataOptions returned 0 options")
+	}
+
+	message := viewingkey.GeneratePersonalSignMessage(string(o.userID), integration.TenChainID, 1)
+	messageHash := accounts.TextHash([]byte(message))
 	sig, err := crypto.Sign(messageHash, pk)
 	if err != nil {
 		return fmt.Errorf("failed to sign message: %w", err)

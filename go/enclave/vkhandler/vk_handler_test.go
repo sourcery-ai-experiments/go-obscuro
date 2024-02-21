@@ -36,7 +36,7 @@ func TestVKHandler(t *testing.T) {
 		t.Fatalf("GenerateAuthenticationEIP712RawDataOptions returned no results")
 	}
 	EIP712MessageFormatTestHash := crypto.Keccak256(EIP712MessageDataOptions[0])
-	PersonalSignMessage := viewingkey.GenerateSignMessage(vkPubKeyBytes)
+	PersonalSignMessage := viewingkey.GeneratePersonalSignMessage(userID, chainID, 1)
 	PersonalSignMessageHash := accounts.TextHash([]byte(PersonalSignMessage))
 
 	tests := map[string][]byte{
@@ -82,7 +82,7 @@ func TestSignAndCheckSignature(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	EIP712MessageFormatTestHash := crypto.Keccak256(EIP712MessageData[0])
-	PersonalSignMessage := viewingkey.GenerateSignMessage(vkPubKeyBytes)
+	PersonalSignMessage := viewingkey.GeneratePersonalSignMessage(userID, chainID, 1)
 	PersonalSignMessageHash := accounts.TextHash([]byte(PersonalSignMessage))
 
 	tests := map[string][]byte{

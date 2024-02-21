@@ -306,22 +306,17 @@ func CheckEIP712Signature(userID string, signature []byte, chainID int64) (*geth
 	return nil, errors.New("EIP 712 signature verification failed")
 }
 
-// CheckSignature checks if the signature is valid for the encryption token and returns the address or an error
-// it checks both personal sign and EIP712 signatures
-func CheckSignature(encryptionToken string, signature []byte, chainID int64) (*gethcommon.Address, error) {
-	if len(encryptionToken) != EncryptionTokenHexLength {
-		return nil, fmt.Errorf("encryption token hex length must be %d, received %d", EncryptionTokenHexLength, len(encryptionToken))
+// CheckIfSignatureIsValidAndMatchesAddress checks if the signature is valid for the encryption token and matches the expected address
+func CheckIfSignatureIsValidAndMatchesAddress(encryptionToken string, signature []byte, chainID int64, expectedAddress *gethcommon.Address) bool {
+	// check if the signature is valid for the encryption token using the EIP712 method
+	if address, err := CheckEIP712Signature(encryptionToken, signature, chainID); err == nil && address.Hex() == expectedAddress.Hex() {
+		return true
 	}
 
-	// check if the signature is valid for the encryption token
-	if address, err := CheckPersonalSignSignature(encryptionToken, signature, chainID); err == nil {
-		return address, nil
-	}
+	// check if the signature is valid for the encryption token using the personal sign method
+	//if address, err := CheckPersonalSignSignature(encryptionToken, signature, chainID); err == nil && address.Hex() == expectedAddress.Hex() {
+	//	return true
+	//}
 
-	// check if the signature is valid for the encryption token
-	if address, err := CheckEIP712Signature(encryptionToken, signature, chainID); err == nil {
-		return address, nil
-	}
-
-	return nil, fmt.Errorf("signature verification failed")
+	return false
 }

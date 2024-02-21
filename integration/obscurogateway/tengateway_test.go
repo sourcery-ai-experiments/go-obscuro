@@ -100,6 +100,7 @@ func TestTenGateway(t *testing.T) {
 		"testUnsubscribe":                      testUnsubscribe,
 		"testClosingConnectionWhileSubscribed": testClosingConnectionWhileSubscribed,
 		"testSubscriptionTopics":               testSubscriptionTopics,
+		"testDifferentMessagesOnRegister":      testDifferentMessagesOnRegister,
 	} {
 		t.Run(name, func(t *testing.T) {
 			test(t, httpURL, wsURL, w)
@@ -602,6 +603,20 @@ func testClosingConnectionWhileSubscribed(t *testing.T, httpURL, wsURL string, w
 
 	// Call unsubscribe (should handle it without issues even if it is already unsubscribed by closing the channel)
 	subscription.Unsubscribe()
+}
+
+func testDifferentMessagesOnRegister(t *testing.T, httpURL, wsURL string, w wallet.Wallet) {
+	user, err := NewUser([]wallet.Wallet{w, datagenerator.RandomWallet(integration.TenChainID)}, httpURL, wsURL)
+	require.NoError(t, err)
+	testlog.Logger().Info("Created user with encryption token: %s\n", user.tgClient.UserID())
+
+	// register all the accounts for the user with EIP-712 message format
+	err = user.RegisterAccounts()
+	require.NoError(t, err)
+
+	// register all the accounts for the user with personal sign message format
+	err = user.RegisterAccountsNonEIP712()
+	require.NoError(t, err)
 }
 
 func transferRandomAddr(t *testing.T, client *ethclient.Client, w wallet.Wallet) common.TxHash { //nolint: unused

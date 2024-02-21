@@ -51,11 +51,23 @@ func NewUser(wallets []wallet.Wallet, serverAddressHTTP string, serverAddressWS 
 
 func (u GatewayUser) RegisterAccounts() error {
 	for _, w := range u.Wallets {
+		err := u.tgClient.RegisterAccount(w.PrivateKey(), w.Address())
+		if err != nil {
+			return err
+		}
+		testlog.Logger().Info(fmt.Sprintf("Successfully registered address %s for user: %s. With EIP-712 message", w.Address().Hex(), u.tgClient.UserID()))
+	}
+
+	return nil
+}
+
+func (u GatewayUser) RegisterAccountsNonEIP712() error {
+	for _, w := range u.Wallets {
 		err := u.tgClient.RegisterAccountNonEP712(w.PrivateKey(), w.Address())
 		if err != nil {
 			return err
 		}
-		testlog.Logger().Info(fmt.Sprintf("Successfully registered address %s for user: %s.", w.Address().Hex(), u.tgClient.UserID()))
+		testlog.Logger().Info(fmt.Sprintf("Successfully registered address %s for user: %s. With personal sign message", w.Address().Hex(), u.tgClient.UserID()))
 	}
 
 	return nil

@@ -36,10 +36,13 @@ func TestVKHandler(t *testing.T) {
 		t.Fatalf("GenerateAuthenticationEIP712RawDataOptions returned no results")
 	}
 	EIP712MessageFormatTestHash := crypto.Keccak256(EIP712MessageDataOptions[0])
+	PersonalSignMessage := viewingkey.GenerateSignMessage(vkPubKeyBytes)
+	PersonalSignMessageHash := accounts.TextHash([]byte(PersonalSignMessage))
 
 	tests := map[string][]byte{
-		"WEMessageFormatTest":     WEMessageFormatTestHash,
-		"EIP712MessageFormatTest": EIP712MessageFormatTestHash,
+		"WEMessageFormatTest":           WEMessageFormatTestHash,
+		"EIP712MessageFormatTest":       EIP712MessageFormatTestHash,
+		"PersonalSignMessageFormatTest": PersonalSignMessageHash,
 	}
 
 	for testName, msgHashToSign := range tests {
@@ -79,10 +82,13 @@ func TestSignAndCheckSignature(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	EIP712MessageFormatTestHash := crypto.Keccak256(EIP712MessageData[0])
+	PersonalSignMessage := viewingkey.GenerateSignMessage(vkPubKeyBytes)
+	PersonalSignMessageHash := accounts.TextHash([]byte(PersonalSignMessage))
 
 	tests := map[string][]byte{
-		"WEMessageFormatTest":     WEMessageFormatTestHash,
-		"EIP712MessageFormatTest": EIP712MessageFormatTestHash,
+		"WEMessageFormatTest":           WEMessageFormatTestHash,
+		"EIP712MessageFormatTest":       EIP712MessageFormatTestHash,
+		"PersonalSignMessageFormatTest": PersonalSignMessageHash,
 	}
 
 	for testName, msgHashToSign := range tests {

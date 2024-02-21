@@ -144,6 +144,10 @@ func GenerateSignMessage(vkPubKey []byte) string {
 	return SignedMsgPrefix + hex.EncodeToString(vkPubKey)
 }
 
+func GeneratePersonalSignMessage(encryptionToken string, chainID int64, version int) string {
+	return fmt.Sprintf(PersonalSignMessageFormat, encryptionToken, chainID, version)
+}
+
 // getBytesFromTypedData creates EIP-712 compliant hash from typedData.
 // It involves hashing the message with its structure, hashing domain separator,
 // and then encoding both hashes with specific EIP-712 bytes to construct the final message format.
@@ -250,7 +254,8 @@ func CheckSignatureAndReturnAccountAddress(hashBytes []byte, signature []byte) (
 	return nil, fmt.Errorf("invalid signature")
 }
 
-func CheckPersonalSignSignature(encryptionToken string, signature []byte, chainID int64) (*gethcommon.Address, error) {
+// checkPersonalSignSignature checks if signature is valid for provided encryptionToken and chainID and return address or nil if not valid
+func checkPersonalSignSignature(encryptionToken string, signature []byte, chainID int64) (*gethcommon.Address, error) {
 	if len(signature) != 65 {
 		return nil, fmt.Errorf("invalid signaure length: %d", len(signature))
 	}
@@ -262,7 +267,7 @@ func CheckPersonalSignSignature(encryptionToken string, signature []byte, chainI
 
 	// create all possible hashes (for all the supported versions) of the message (needed for signature verification)
 	for _, version := range PersonalSignMessageSupportedVersions {
-		message := fmt.Sprintf(PersonalSignMessageFormat, encryptionToken, chainID, version)
+		message := GeneratePersonalSignMessage(encryptionToken, chainID, version)
 		prefixedMessage := fmt.Sprintf(PersonalSignMessagePrefix, len(message), message)
 		messageHash := crypto.Keccak256([]byte(prefixedMessage))
 
@@ -276,8 +281,8 @@ func CheckPersonalSignSignature(encryptionToken string, signature []byte, chainI
 	return nil, fmt.Errorf("signature verification failed")
 }
 
-// CheckEIP712Signature checks if signature is valid for provided userID and chainID and return address or nil if not valid
-func CheckEIP712Signature(userID string, signature []byte, chainID int64) (*gethcommon.Address, error) {
+// checkEIP712Signature checks if signature is valid for provided userID and chainID and return address or nil if not valid
+func checkEIP712Signature(userID string, signature []byte, chainID int64) (*gethcommon.Address, error) {
 	if len(signature) != 65 {
 		return nil, fmt.Errorf("invalid signaure length: %d", len(signature))
 	}
@@ -309,14 +314,14 @@ func CheckEIP712Signature(userID string, signature []byte, chainID int64) (*geth
 // CheckIfSignatureIsValidAndMatchesAddress checks if the signature is valid for the encryption token and matches the expected address
 func CheckIfSignatureIsValidAndMatchesAddress(encryptionToken string, signature []byte, chainID int64, expectedAddress *gethcommon.Address) bool {
 	// check if the signature is valid for the encryption token using the EIP712 method
-	if address, err := CheckEIP712Signature(encryptionToken, signature, chainID); err == nil && address.Hex() == expectedAddress.Hex() {
+	if address, err := checkEIP712Signature(encryptionToken, signature, chainID); err == nil && address.Hex() == expectedAddress.Hex() {
 		return true
 	}
 
 	// check if the signature is valid for the encryption token using the personal sign method
-	//if address, err := CheckPersonalSignSignature(encryptionToken, signature, chainID); err == nil && address.Hex() == expectedAddress.Hex() {
-	//	return true
-	//}
+	if address, err := checkPersonalSignSignature(encryptionToken, signature, chainID); err == nil && address.Hex() == expectedAddress.Hex() {
+		return true
+	}
 
 	return false
 }

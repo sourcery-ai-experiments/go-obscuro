@@ -40,6 +40,8 @@ const (
 	EncryptionTokenHexLength  = 40
 	PersonalSignMessagePrefix = "\x19Ethereum Signed Message:\n%d%s"
 	PersonalSignMessageFormat = "Token: %s on: %d version: v%d"
+	EIP712SignatureType       = 0
+	PersonalSignSignatureType = 1
 )
 
 // EIP712EncryptionTokens is a list of all possible options for Encryption token name
@@ -69,6 +71,7 @@ type RPCSignedViewingKey struct {
 	Account                 *gethcommon.Address
 	PublicKey               []byte
 	SignatureWithAccountKey []byte
+	SignatureType           int
 }
 
 // GenerateViewingKeyForWallet takes an account wallet, generates a viewing key and signs the key with the acc's private key
@@ -312,15 +315,18 @@ func checkEIP712Signature(userID string, signature []byte, chainID int64) (*geth
 }
 
 // CheckIfSignatureIsValidAndMatchesAddress checks if the signature is valid for the encryption token and matches the expected address
-func CheckIfSignatureIsValidAndMatchesAddress(encryptionToken string, signature []byte, chainID int64, expectedAddress *gethcommon.Address) bool {
-	// check if the signature is valid for the encryption token using the EIP712 method
-	if address, err := checkEIP712Signature(encryptionToken, signature, chainID); err == nil && address.Hex() == expectedAddress.Hex() {
-		return true
+func CheckIfSignatureIsValidAndMatchesAddress(encryptionToken string, signature []byte, chainID int64, expectedAddress *gethcommon.Address, signatureType int) bool {
+
+	if signatureType == EIP712SignatureType {
+		if address, err := checkEIP712Signature(encryptionToken, signature, chainID); err == nil && address.Hex() == expectedAddress.Hex() {
+			return true
+		}
 	}
 
-	// check if the signature is valid for the encryption token using the personal sign method
-	if address, err := checkPersonalSignSignature(encryptionToken, signature, chainID); err == nil && address.Hex() == expectedAddress.Hex() {
-		return true
+	if signatureType == PersonalSignSignatureType {
+		if address, err := checkPersonalSignSignature(encryptionToken, signature, chainID); err == nil && address.Hex() == expectedAddress.Hex() {
+			return true
+		}
 	}
 
 	return false

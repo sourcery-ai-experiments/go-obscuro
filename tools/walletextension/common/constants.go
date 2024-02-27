@@ -31,6 +31,7 @@ const (
 	PathSubmitViewingKey                = "/submitviewingkey/"
 	PathJoin                            = "/join/"
 	PathAuthenticate                    = "/authenticate/"
+	PathAuthenticatePersonal            = "/authenticate_personal/"
 	PathQuery                           = "/query/"
 	PathRevoke                          = "/revoke/"
 	PathObscuroGateway                  = "/"

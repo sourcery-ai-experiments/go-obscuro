@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ten-protocol/go-ten/go/common/viewingkey"
 	"net/http"
 
 	"github.com/ten-protocol/go-ten/go/common/log"
@@ -49,7 +50,12 @@ func NewHTTPRoutes(walletExt *walletextension.WalletExtension) []Route {
 		},
 		{
 			Name: common.APIVersion1 + common.PathAuthenticate,
-			Func: httpHandler(walletExt, authenticateRequestHandler),
+			Func: httpHandler(walletExt, authenticateEIP712SignRequestHandler),
+		},
+		// TODO: We might need to consider adding a new version field in authenticate endpoint to tell which signature format is it and not add new endpoint?
+		{
+			Name: common.APIVersion1 + common.PathAuthenticatePersonal,
+			Func: httpHandler(walletExt, authenticatePersonalSignRequestHandler),
 		},
 		{
 			Name: common.APIVersion1 + common.PathQuery,
@@ -280,10 +286,18 @@ func joinRequestHandler(walletExt *walletextension.WalletExtension, conn usercon
 	}
 }
 
+func authenticateEIP712SignRequestHandler(walletExt *walletextension.WalletExtension, conn userconn.UserConn) {
+	authenticateRequestHandler(walletExt, conn, viewingkey.EIP712SignatureType)
+}
+
+func authenticatePersonalSignRequestHandler(walletExt *walletextension.WalletExtension, conn userconn.UserConn) {
+	authenticateRequestHandler(walletExt, conn, viewingkey.PersonalSignSignatureType)
+}
+
 // This function handles request to /authenticate endpoint.
 // In the request we receive message, signature and address in JSON as request body and userID and address as query parameters
 // We then check if message is in correct format and if signature is valid. If all checks pass we save address and signature against userID
-func authenticateRequestHandler(walletExt *walletextension.WalletExtension, conn userconn.UserConn) {
+func authenticateRequestHandler(walletExt *walletextension.WalletExtension, conn userconn.UserConn, signatureType int) {
 	// read the request
 	body, err := conn.ReadRequest()
 	if err != nil {
@@ -321,7 +335,7 @@ func authenticateRequestHandler(walletExt *walletextension.WalletExtension, conn
 	}
 
 	// check signature and add address and signature for that user
-	err = walletExt.AddAddressToUser(hexUserID, address, signature)
+	err = walletExt.AddAddressToUser(hexUserID, address, signature, signatureType)
 	if err != nil {
 		handleError(conn, walletExt.Logger(), fmt.Errorf("internal error"))
 		walletExt.Logger().Error(fmt.Sprintf("error adding address: %s to user: %s with signature: %s", address, hexUserID, signature))

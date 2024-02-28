@@ -59,6 +59,7 @@ func CreateEncClient(
 		PrivateKey:              privateKey,
 		PublicKey:               PrivateKeyToCompressedPubKey(privateKey),
 		SignatureWithAccountKey: signature,
+		SignatureType:           signatureType,
 	}
 	encClient, err := rpc.NewEncNetworkClient(hostRPCBindAddr, vk, logger)
 	if err != nil {

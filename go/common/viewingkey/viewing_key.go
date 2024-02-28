@@ -42,6 +42,7 @@ const (
 	PersonalSignMessageFormat = "Token: %s on: %d version: v%d"
 	EIP712SignatureType       = 0
 	PersonalSignSignatureType = 1
+	LegacySignatureType       = 2
 )
 
 // EIP712EncryptionTokens is a list of all possible options for Encryption token name
@@ -60,6 +61,7 @@ type ViewingKey struct {
 	PrivateKey              *ecies.PrivateKey   // ViewingKey private key to encrypt data to the enclave
 	PublicKey               []byte              // ViewingKey public key in decrypt data from the enclave
 	SignatureWithAccountKey []byte              // ViewingKey public key signed by the Accounts Private key - Allows to retrieve the Account address
+	SignatureType           int                 // Signature type used to sign the viewing key (we support both EIP712 and personal sign)
 }
 
 // RPCSignedViewingKey - used for transporting a minimalist viewing key via
@@ -67,6 +69,7 @@ type ViewingKey struct {
 // only the public key and the signature are required
 // the account address is sent as well to aid validation
 // todo - send the type of Message that was signed instead of the Account
+// TODO: Question for @Tudor - do you mean SignatureType here for the type of the message?
 type RPCSignedViewingKey struct {
 	Account                 *gethcommon.Address
 	PublicKey               []byte
@@ -184,6 +187,7 @@ func GenerateAuthenticationEIP712RawDataOptions(userID string, chainID int64) ([
 	}
 
 	typedDataList := make([]apitypes.TypedData, 0, len(EIP712EncryptionTokens))
+	// TODO: If we have a different type for EncryptionToken vs EncryptionTokenV2 we can get rid of this loop and simplify verification
 	for _, encTokenName := range EIP712EncryptionTokens {
 		message := map[string]interface{}{
 			encTokenName: encryptionToken,
@@ -301,6 +305,7 @@ func checkEIP712Signature(userID string, signature []byte, chainID int64) (*geth
 		signature[64] -= 27
 	}
 
+	// TODO: If we have a different type for EncryptionToken vs EncryptionTokenV2 we can get rid of this loop and simplify verification
 	for _, rawData := range rawDataOptions {
 		// create a hash of structured message (needed for signature verification)
 		hashBytes := crypto.Keccak256(rawData)
@@ -315,8 +320,8 @@ func checkEIP712Signature(userID string, signature []byte, chainID int64) (*geth
 }
 
 // CheckIfSignatureIsValidAndMatchesAddress checks if the signature is valid for the encryption token and matches the expected address
+// TODO: @Ziga - REFACTOR THIS METHOD
 func CheckIfSignatureIsValidAndMatchesAddress(encryptionToken string, signature []byte, chainID int64, expectedAddress *gethcommon.Address, signatureType int) bool {
-
 	if signatureType == EIP712SignatureType {
 		if address, err := checkEIP712Signature(encryptionToken, signature, chainID); err == nil && address.Hex() == expectedAddress.Hex() {
 			return true

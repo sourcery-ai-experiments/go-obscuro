@@ -233,7 +233,7 @@ func (w *WalletExtension) SubmitViewingKey(address gethcommon.Address, signature
 
 	defaultAccountManager.AddClient(address, client)
 
-	err = w.storage.AddAccount([]byte(common.DefaultUser), vk.Account.Bytes(), vk.SignatureWithAccountKey)
+	err = w.storage.AddAccount([]byte(common.DefaultUser), vk.Account.Bytes(), vk.SignatureWithAccountKey, viewingkey.LegacySignatureType)
 	if err != nil {
 		return fmt.Errorf("error saving account %s for user %s", vk.Account.Hex(), common.DefaultUser)
 	}
@@ -293,7 +293,7 @@ func (w *WalletExtension) AddAddressToUser(hexUserID string, address string, sig
 		w.Logger().Error(fmt.Errorf("error decoding string (%s), %w", hexUserID[2:], err).Error())
 		return errors.New("error decoding userID. It should be in hex format")
 	}
-	err = w.storage.AddAccount(userIDBytes, addressFromMessage.Bytes(), signature)
+	err = w.storage.AddAccount(userIDBytes, addressFromMessage.Bytes(), signature, signatureType)
 	if err != nil {
 		w.Logger().Error(fmt.Errorf("error while storing account (%s) for user (%s): %w", addressFromMessage.Hex(), hexUserID, err).Error())
 		return err
@@ -307,7 +307,7 @@ func (w *WalletExtension) AddAddressToUser(hexUserID string, address string, sig
 
 	accManager := w.userAccountManager.AddAndReturnAccountManager(hexUserID)
 
-	encClient, err := common.CreateEncClient(w.hostAddrHTTP, addressFromMessage.Bytes(), privateKeyBytes, signature, w.Logger())
+	encClient, err := common.CreateEncClient(w.hostAddrHTTP, addressFromMessage.Bytes(), privateKeyBytes, signature, signatureType, w.Logger())
 	if err != nil {
 		w.Logger().Error(fmt.Errorf("error creating encrypted client for user: (%s), %w", hexUserID, err).Error())
 		return fmt.Errorf("error creating encrypted client for user: (%s), %w", hexUserID, err)

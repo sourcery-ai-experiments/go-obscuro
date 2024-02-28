@@ -4,8 +4,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/ten-protocol/go-ten/go/common/viewingkey"
 	"net/http"
+
+	"github.com/ten-protocol/go-ten/go/common/viewingkey"
 
 	"github.com/ten-protocol/go-ten/go/common/log"
 

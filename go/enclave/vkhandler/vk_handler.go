@@ -54,26 +54,27 @@ func checkViewingKeyAndRecoverAddress(vk *AuthenticatedViewingKey, chainID int64
 	vk.UserID = userID
 
 	// check signature and check if it matches the account address (assuming the message was signed with EIP712) and return address if it does
-	isValidAndMatchesAddress := viewingkey.CheckIfSignatureIsValidAndMatchesAddress(userID, vk.rpcVK.SignatureWithAccountKey, chainID, vk.AccountAddress)
+	isValidAndMatchesAddress := viewingkey.CheckIfSignatureIsValidAndMatchesAddress(userID, vk.rpcVK.SignatureWithAccountKey, chainID, vk.AccountAddress, vk.rpcVK.SignatureType)
 	if isValidAndMatchesAddress {
 		return vk.AccountAddress, nil
 	}
 
 	// TODO @Ziga - this must be removed once the legacy format is no longer supported
-	// signature is either invalid or it might have been using the legacy format
+	if vk.rpcVK.SignatureType == viewingkey.LegacySignatureType {
+		// signature is either invalid or it might have been using the legacy format
+		// check signature and recover the address assuming the message was signed with EIP712
+		legacyMessageHash := accounts.TextHash([]byte(viewingkey.GenerateSignMessage(vk.rpcVK.PublicKey)))
+		legacyMessageSignerAddress, err := viewingkey.CheckSignatureAndReturnAccountAddress(legacyMessageHash, vk.rpcVK.SignatureWithAccountKey)
+		if err != nil {
+			return nil, fmt.Errorf("invalid vk signature")
+		}
 
-	// check signature and recover the address assuming the message was signed with EIP712
-	legacyMessageHash := accounts.TextHash([]byte(viewingkey.GenerateSignMessage(vk.rpcVK.PublicKey)))
-	legacyMessageSignerAddress, err := viewingkey.CheckSignatureAndReturnAccountAddress(legacyMessageHash, vk.rpcVK.SignatureWithAccountKey)
-	if err != nil {
-		return nil, fmt.Errorf("invalid vk signature")
+		if legacyMessageSignerAddress.Hex() != vk.AccountAddress.Hex() {
+			return nil, fmt.Errorf("invalid VK")
+		}
 	}
 
-	if legacyMessageSignerAddress.Hex() != vk.AccountAddress.Hex() {
-		return nil, fmt.Errorf("invalid VK")
-	}
-
-	return vk.AccountAddress, err
+	return nil, fmt.Errorf("invalid vk signature")
 }
 
 // crypto.rand is quite slow. When this variable is true, we will use a fast CSPRNG algorithm

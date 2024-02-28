@@ -44,6 +44,7 @@ func CreateEncClient(
 	addressBytes []byte,
 	privateKeyBytes []byte,
 	signature []byte,
+	signatureType int,
 	logger gethlog.Logger,
 ) (*rpc.EncRPCClient, error) {
 	privateKey, err := BytesToPrivateKey(privateKeyBytes)

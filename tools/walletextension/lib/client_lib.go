@@ -119,7 +119,7 @@ func (o *TGLib) RegisterAccountNonEP712(pk *ecdsa.PrivateKey, addr gethcommon.Ad
 	req, err := http.NewRequestWithContext(
 		context.Background(),
 		http.MethodPost,
-		o.httpURL+"/v1/authenticate/?token="+string(o.userID),
+		o.httpURL+"/v1/authenticate_personal/?token="+string(o.userID),
 		strings.NewReader(payload),
 	)
 	if err != nil {

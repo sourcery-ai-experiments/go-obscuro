@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ten-protocol/go-ten/integration/simulation/params"
 	"math/big"
 	"net/http"
 	"time"
@@ -130,6 +131,10 @@ func (t *testnetConnector) AllocateFaucetFundsWithWallet(ctx context.Context, ac
 		return fmt.Errorf("faucet transaction receipt status not successful - %v", receipt.Status)
 	}
 	return nil
+}
+
+func (t *testnetConnector) GetNetworkWallets() (*params.SimWallets, error) {
+	return nil, errors.New("testnet connector environments cannot access the network wallets")
 }
 
 func (t *testnetConnector) GetMCOwnerWallet() (wallet.Wallet, error) {

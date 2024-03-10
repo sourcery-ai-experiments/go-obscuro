@@ -2,9 +2,9 @@ package networktest
 
 import (
 	"context"
-
 	"github.com/ten-protocol/go-ten/go/ethadapter"
 	"github.com/ten-protocol/go-ten/go/wallet"
+	"github.com/ten-protocol/go-ten/integration/simulation/params"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -24,6 +24,7 @@ type NetworkConnector interface {
 	GetSequencerNode() NodeOperator
 	GetValidatorNode(idx int) NodeOperator
 	GetL1Client() (ethadapter.EthClient, error)
+	GetNetworkWallets() (*params.SimWallets, error)
 	GetMCOwnerWallet() (wallet.Wallet, error) // wallet that owns the management contract (network admin)
 	GetGatewayURL() (string, error)
 }

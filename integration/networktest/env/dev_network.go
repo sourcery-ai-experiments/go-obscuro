@@ -62,11 +62,17 @@ func awaitHealthStatus(rpcAddress string, timeout time.Duration) error {
 }
 
 func LocalDevNetwork(opts ...LocalNetworkOption) networktest.Environment {
-	config := &LocalNetworkConfig{}
+	config := &LocalNetworkConfig{
+		false,
+		0,
+		4,
+	}
 	for _, opt := range opts {
 		opt(config)
 	}
-	return &devNetworkEnv{inMemDevNetwork: devnetwork.DefaultDevNetwork(config.TenGatewayEnabled)}
+	return &devNetworkEnv{
+		inMemDevNetwork: devnetwork.DefaultDevNetwork(config.TenGatewayEnabled, config.NumNodes, config.NumSimWallets),
+	}
 }
 
 // LocalNetworkLiveL1 creates a local network that points to a live running L1.
@@ -77,6 +83,8 @@ func LocalNetworkLiveL1(seqWallet wallet.Wallet, validatorWallets []wallet.Walle
 
 type LocalNetworkConfig struct {
 	TenGatewayEnabled bool
+	NumSimWallets     int
+	NumNodes          int
 }
 
 type LocalNetworkOption func(*LocalNetworkConfig)
@@ -84,5 +92,17 @@ type LocalNetworkOption func(*LocalNetworkConfig)
 func WithTenGateway() LocalNetworkOption {
 	return func(c *LocalNetworkConfig) {
 		c.TenGatewayEnabled = true
+	}
+}
+
+func WithSimWallets(numSimWallets int) LocalNetworkOption {
+	return func(c *LocalNetworkConfig) {
+		c.NumSimWallets = numSimWallets
+	}
+}
+
+func WithNumNodes(numNodes int) LocalNetworkOption {
+	return func(c *LocalNetworkConfig) {
+		c.NumNodes = numNodes
 	}
 }

@@ -72,6 +72,10 @@ func (s *InMemDevNetwork) GetGatewayURL() (string, error) {
 	return fmt.Sprintf("http://localhost:%d", _gwHTTPPort), nil
 }
 
+func (s *InMemDevNetwork) GetNetworkWallets() (*params.SimWallets, error) {
+	return s.networkWallets, nil
+}
+
 func (s *InMemDevNetwork) GetMCOwnerWallet() (wallet.Wallet, error) {
 	return s.networkWallets.MCOwnerWallet, nil
 }

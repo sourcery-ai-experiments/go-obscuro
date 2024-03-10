@@ -1,7 +1,10 @@
 package helpful
 
 import (
+	"crypto/ecdsa"
+	"encoding/hex"
 	"fmt"
+	"github.com/ten-protocol/go-ten/integration/networktest/userwallet"
 	"math/big"
 	"os"
 	"os/signal"
@@ -26,14 +29,43 @@ const (
 
 	_sepoliaSequencerPK  = "<pk>" // account 0x<acc>
 	_sepoliaValidator1PK = "<pk>" // account 0x<acc>
+
+	_tenChainID = 443
+	_gatewayURL = "http://localhost:11180"
+	_tenPK      = "<pk>"
 )
 
+func TestGatewayAddUser(t *testing.T) {
+	networktest.TestOnlyRunsInIDE(t)
+	networktest.EnsureTestLogsSetUp("local-gateway-user")
+	tenWallet := wallet.NewInMemoryWalletFromConfig(_tenPK, _tenChainID, testlog.Logger())
+	gatewayUser, err := userwallet.NewGatewayUser(tenWallet, _gatewayURL, testlog.Logger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("pk", _tenPK, "address:", gatewayUser.Wallet().Address())
+}
 func TestRunLocalNetwork(t *testing.T) {
 	networktest.TestOnlyRunsInIDE(t)
 	networktest.EnsureTestLogsSetUp("local-geth-network")
-	networkConnector, cleanUp, err := env.LocalDevNetwork(env.WithTenGateway()).Prepare()
+	networkConnector, cleanUp, err := env.LocalDevNetwork(env.WithTenGateway(), env.WithSimWallets(3)).Prepare()
 	if err != nil {
 		t.Fatal(err)
+	}
+	wallets, err := networkConnector.GetNetworkWallets()
+	ethWallets := wallets.AllEthWallets()
+	obsWallets := wallets.AllObsWallets()
+	simWallets := wallets.SimObsWallets
+
+	// Print the Ethereum and Obscuro wallet addresses
+	for _, w := range simWallets {
+		fmt.Println("Ten Sim Wallet:\n", "pK:", privateKeyToHex(w.PrivateKey()), "account:", w.Address().String())
+	}
+	for _, w := range ethWallets {
+		fmt.Println("Ethereum Wallet:", w.Address().Hex())
+	}
+	for _, w := range obsWallets {
+		fmt.Println("Obscuro Wallet:", w.Address().Hex())
 	}
 	defer cleanUp()
 
@@ -111,4 +143,8 @@ func keepRunning(networkConnector networktest.NetworkConnector) {
 	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
 	fmt.Println("Network running until test is stopped...")
 	<-done // Will block here until user hits ctrl+c
+}
+
+func privateKeyToHex(priv *ecdsa.PrivateKey) string {
+	return hex.EncodeToString(priv.D.Bytes())
 }

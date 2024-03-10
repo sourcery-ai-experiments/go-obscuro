@@ -41,7 +41,7 @@ func DefaultDevNetwork(tenGateway bool, numNodes int, numSimWallets int) *InMemD
 	networkWallets := params.NewSimWallets(numSimWallets, numNodes, integration.EthereumChainID, integration.TenChainID)
 	l1Config := &L1Config{
 		PortStart:        integration.StartPortSimulationFullNetwork,
-		NumNodes:         4,
+		NumNodes:         numNodes,
 		AvgBlockDuration: 1 * time.Second,
 	}
 	l1Network := NewGethNetwork(networkWallets, l1Config)
@@ -51,7 +51,7 @@ func DefaultDevNetwork(tenGateway bool, numNodes int, numSimWallets int) *InMemD
 		l1Network:      l1Network,
 		obscuroConfig: ObscuroConfig{
 			PortStart:         integration.StartPortSimulationFullNetwork,
-			InitNumValidators: 3,
+			InitNumValidators: numNodes - 1,
 			BatchInterval:     1 * time.Second,
 			RollupInterval:    10 * time.Second,
 			L1BlockTime:       15 * time.Second,

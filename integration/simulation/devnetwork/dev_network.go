@@ -33,7 +33,7 @@ const (
 	_gwWSPort   = 11181
 )
 
-var _defaultFaucetAmount = big.NewInt(750_000_000_000_000)
+var _defaultFaucetAmount = big.NewInt(750_000_000_000_000_000)
 
 // InMemDevNetwork is a local dev network (L1 and L2) - the obscuro nodes are in-memory in a single go process, the L1 nodes are a docker geth network
 //

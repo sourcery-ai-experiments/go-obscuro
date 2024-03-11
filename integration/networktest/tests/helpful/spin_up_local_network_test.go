@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/ten-protocol/go-ten/integration/networktest/userwallet"
+	"golang.org/x/net/context"
 	"math/big"
 	"os"
 	"os/signal"
@@ -39,12 +40,23 @@ func TestGatewayAddUser(t *testing.T) {
 	networktest.TestOnlyRunsInIDE(t)
 	networktest.EnsureTestLogsSetUp("local-gateway-user")
 	tenWallet := wallet.NewInMemoryWalletFromConfig(_tenPK, _tenChainID, testlog.Logger())
-	gatewayUser, err := userwallet.NewGatewayUser(tenWallet, _gatewayURL, testlog.Logger())
+	err := addWalletsToGateway(append([]wallet.Wallet{}, tenWallet))
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println("pk", _tenPK, "address:", gatewayUser.Wallet().Address())
 }
+
+func addWalletsToGateway(wallets []wallet.Wallet) error {
+	for _, w := range wallets {
+		_, err := userwallet.NewGatewayUser(w, _gatewayURL, testlog.Logger())
+		if err != nil {
+			return err
+		}
+		fmt.Println("Ten Sim Wallet:\n", "pk:", privateKeyToHex(w.PrivateKey()), "account:", w.Address().String())
+	}
+	return nil
+}
+
 func TestRunLocalNetwork(t *testing.T) {
 	networktest.TestOnlyRunsInIDE(t)
 	networktest.EnsureTestLogsSetUp("local-geth-network")
@@ -57,10 +69,22 @@ func TestRunLocalNetwork(t *testing.T) {
 	obsWallets := wallets.AllObsWallets()
 	simWallets := wallets.SimObsWallets
 
-	// Print the Ethereum and Obscuro wallet addresses
-	for _, w := range simWallets {
-		fmt.Println("Ten Sim Wallet:\n", "pK:", privateKeyToHex(w.PrivateKey()), "account:", w.Address().String())
+	if len(_tenPK) == 64 { // a pk const is entered so create wallet and append to sims
+		tenWallet := wallet.NewInMemoryWalletFromConfig(_tenPK, _tenChainID, testlog.Logger())
+		simWallets = append(simWallets, tenWallet)
+		// fund this wallet
+		err = networkConnector.AllocateFaucetFunds(context.Background(), tenWallet.Address())
+		if err != nil {
+			t.Log(err)
+		}
 	}
+
+	err = addWalletsToGateway(simWallets)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Print the Ethereum and Obscuro wallet addresses
 	for _, w := range ethWallets {
 		fmt.Println("Ethereum Wallet:", w.Address().Hex())
 	}

@@ -3,11 +3,16 @@ package components
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"math/big"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ten-protocol/go-ten/go/enclave/storage"
 
 	gethcommon "github.com/ethereum/go-ethereum/common"
+)
+
+const (
+	// signature contains R, S and V (1 byte recovery ID)
+	_ECDSASignatureLength = 65
 )
 
 type SignatureValidator struct {
@@ -26,8 +31,8 @@ func NewSignatureValidator(seqID gethcommon.Address, storage storage.Storage) (*
 }
 
 // CheckSequencerSignature - verifies the signature against the registered sequencer
-func (sigChecker *SignatureValidator) CheckSequencerSignature(headerHash gethcommon.Hash, sigR *big.Int, sigS *big.Int) error {
-	if sigR == nil || sigS == nil {
+func (sigChecker *SignatureValidator) CheckSequencerSignature(headerHash gethcommon.Hash, signature []byte) error {
+	if signature == nil || len(signature) != _ECDSASignatureLength {
 		return fmt.Errorf("missing signature on batch")
 	}
 
@@ -39,7 +44,7 @@ func (sigChecker *SignatureValidator) CheckSequencerSignature(headerHash gethcom
 		sigChecker.attestedKey = attestedKey
 	}
 
-	if !ecdsa.Verify(sigChecker.attestedKey, headerHash.Bytes(), sigR, sigS) {
+	if !crypto.VerifySignature(crypto.FromECDSAPub(sigChecker.attestedKey), headerHash.Bytes(), signature[:_ECDSASignatureLength-1]) {
 		return fmt.Errorf("could not verify ECDSA signature")
 	}
 	return nil

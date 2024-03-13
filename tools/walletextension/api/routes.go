@@ -47,6 +47,10 @@ func NewHTTPRoutes(walletExt *walletextension.WalletExtension) []Route {
 			Func: httpHandler(walletExt, joinRequestHandler),
 		},
 		{
+			Name: common.APIVersion1 + common.PathGetMessage,
+			Func: httpHandler(walletExt, getMessageRequestHandler),
+		},
+		{
 			Name: common.APIVersion1 + common.PathAuthenticate,
 			Func: httpHandler(walletExt, authenticateRequestHandler),
 		},
@@ -489,4 +493,31 @@ func versionRequestHandler(walletExt *walletextension.WalletExtension, userConn 
 	if err != nil {
 		walletExt.Logger().Error("error writing success response", log.ErrKey, err)
 	}
+}
+
+// ethRequestHandler parses the user eth request, passes it on to the WE to proxy it and processes the response
+func getMessageRequestHandler(walletExt *walletextension.WalletExtension, conn userconn.UserConn) {
+	// read the request
+	body, err := conn.ReadRequest()
+	if err != nil {
+		handleError(conn, walletExt.Logger(), fmt.Errorf("error reading request: %w", err))
+		return
+	}
+
+	// get the text that was signed and signature
+	var reqJSONMap map[string]string
+	err = json.Unmarshal(body, &reqJSONMap)
+	if err != nil {
+		handleError(conn, walletExt.Logger(), fmt.Errorf("could not unmarshal address request - %w", err))
+		return
+	}
+
+	// get address from the request
+	encryptionToken, ok := reqJSONMap[common.JSONKeyEncryptionToken]
+	if !ok || len(encryptionToken) != common.MessageUserIDLen {
+		handleError(conn, walletExt.Logger(), fmt.Errorf("unable to read encryptionToken field from the request"))
+		return
+	}
+
+	fmt.Println(encryptionToken)
 }
